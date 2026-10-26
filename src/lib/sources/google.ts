@@ -3,7 +3,8 @@ import { sql } from "../db";
 import { appUrl, env } from "../env";
 import { courseKey, isClassSender } from "../courses";
 import { fetchJson, HttpError, htmlToText, mapLimit } from "../http";
-import { readSecret, replaceEvents, upsertItems, type Connection, type EventInput, type ItemInput } from "../store";
+import { hideCalendars } from "../settings";
+import { readSecret, replaceEvents, syncCalendarList, upsertItems, type Connection, type EventInput, type ItemInput } from "../store";
 import { zonedToUtc } from "../time";
 import type { SourceAdapter, SyncContext, SyncResult } from "./types";
 
@@ -235,8 +236,16 @@ async function syncCalendar(ctx: SyncContext, token: string): Promise<number> {
   const from = new Date(ctx.now.getTime() - 2 * 86_400_000);
   const to = new Date(ctx.now.getTime() + 35 * 86_400_000);
   const cals = await api<{ items: CalListEntry[] }>(token, "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader");
-  const wanted: string[] | undefined = ctx.conn.config.calendarIds;
-  const chosen = cals.items.filter((c) => (wanted ? wanted.includes(c.id) : c.selected !== false && !c.hidden));
+  // Every calendar is synced; which ones show on the dashboard is a per-calendar toggle (Settings → Calendars).
+  // Calendars you'd unchecked in Google Calendar start out hidden.
+  const chosen = cals.items;
+  const calId = (c: CalListEntry) => `${ctx.conn.id}:${c.id}`;
+  const calName = (c: CalListEntry) => (c.primary ? `${ctx.conn.account ?? "Calendar"}` : c.summary);
+  const startHidden = await syncCalendarList(
+    ctx.conn.id,
+    chosen.map((c) => ({ id: calId(c), name: calName(c), color: c.backgroundColor ?? null, account: ctx.conn.account, hiddenByDefault: c.selected === false || !!c.hidden })),
+  );
+  if (startHidden.length) await hideCalendars(startHidden);
 
   const events: EventInput[] = [];
   await mapLimit(chosen, 4, async (cal) => {
@@ -258,6 +267,7 @@ async function syncCalendar(ctx: SyncContext, token: string): Promise<number> {
       const endsAt = e.end ? (e.end.date ? zonedToUtc(e.end.date, "00:00", tz) : new Date(e.end.dateTime!)) : null;
       events.push({
         externalId: `${cal.id}:${e.id}`,
+        calendarId: calId(cal),
         calendar: cal.primary ? "Calendar" : cal.summary,
         title: e.summary ?? "(busy)",
         location: e.location ?? null,

@@ -2,7 +2,7 @@ import "server-only";
 import ical, { type VEvent } from "node-ical";
 import { courseKey } from "../courses";
 import { fetchOk } from "../http";
-import { replaceEvents, upsertAssignments, type AssignmentInput, type EventInput } from "../store";
+import { replaceEvents, syncCalendarList, upsertAssignments, type AssignmentInput, type EventInput } from "../store";
 import { zonedToUtc } from "../time";
 import type { SourceAdapter, SyncContext, SyncResult } from "./types";
 
@@ -65,6 +65,7 @@ export const ics: SourceAdapter = {
         } else {
           events.push({
             externalId: `${ev.uid}:${startsAt.toISOString()}`,
+            calendarId: ctx.conn.id,
             calendar: ctx.conn.label,
             title: summary,
             location: text(ev.location as Param) || null,
@@ -79,6 +80,7 @@ export const ics: SourceAdapter = {
       }
     }
 
+    await syncCalendarList(ctx.conn.id, [{ id: ctx.conn.id, name: ctx.conn.label, color: (ctx.conn.config.color as string | undefined) ?? null }]);
     await replaceEvents(ctx.conn.id, "ics", from, to, events);
     const newAssignments = await upsertAssignments(ctx.conn.id, assignments);
     return { newAssignments, counts: { events: events.length, assignments: assignments.length } };

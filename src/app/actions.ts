@@ -259,6 +259,18 @@ export async function saveWidgets(order: string[], hidden: string[]): Promise<Ac
   return { ok: true };
 }
 
+/** Show or hide one calendar's events on the dashboard and in the digest. */
+export async function setCalendarHidden(id: string, hidden: boolean): Promise<ActionResult> {
+  await requireSession();
+  const s = await getSettings();
+  const next = new Set(s.hiddenCalendars);
+  if (hidden) next.add(id);
+  else next.delete(id);
+  await saveSettings({ hiddenCalendars: [...next] });
+  refresh();
+  return { ok: true };
+}
+
 export async function saveCourses(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   await requireSession();
   const aliases: Record<string, string> = {};

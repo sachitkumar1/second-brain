@@ -84,6 +84,8 @@ export const SettingsSchema = z.object({
   // Map raw course names to your preferred label, e.g. {"DATA C100": "Data 100"}.
   courseAliases: z.record(z.string(), z.string()).default({}),
   hiddenCourses: z.array(z.string()).default([]),
+  // Calendar IDs (see the calendars table) whose events are hidden from the dashboard and digest.
+  hiddenCalendars: z.array(z.string()).default([]),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -103,6 +105,11 @@ export async function saveSettings(patch: Partial<Settings>): Promise<Settings> 
     insert into settings (key, value, updated_at) values ('app', ${sql.json(next as never)}, now())
     on conflict (key) do update set value = excluded.value, updated_at = now()`;
   return next;
+}
+
+export async function hideCalendars(ids: string[]): Promise<void> {
+  const s = await getSettings();
+  await saveSettings({ hiddenCalendars: [...new Set([...s.hiddenCalendars, ...ids])] });
 }
 
 /** Small helper for other single-purpose keys (agent token hash, etc.). */

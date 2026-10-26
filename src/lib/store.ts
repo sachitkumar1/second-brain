@@ -163,6 +163,7 @@ export async function upsertItems(connectionId: string | null, items: ItemInput[
 
 export type EventInput = {
   externalId: string;
+  calendarId?: string | null;
   calendar?: string | null;
   title: string;
   location?: string | null;
@@ -180,16 +181,37 @@ export async function replaceEvents(connectionId: string, source: string, from: 
     await tx`delete from events where connection_id = ${connectionId} and starts_at >= ${from} and starts_at < ${to}`;
     for (const e of events) {
       await tx`
-        insert into events (connection_id, source, external_id, calendar, title, location, description, url,
+        insert into events (connection_id, source, external_id, calendar_id, calendar, title, location, description, url,
                             starts_at, ends_at, all_day, color)
-        values (${connectionId}, ${source}, ${e.externalId}, ${e.calendar ?? null}, ${e.title.slice(0, 300)},
+        values (${connectionId}, ${source}, ${e.externalId}, ${e.calendarId ?? null}, ${e.calendar ?? null}, ${e.title.slice(0, 300)},
                 ${e.location ?? null}, ${e.description ? e.description.slice(0, 2000) : null}, ${safeUrl(e.url)},
                 ${e.startsAt}, ${e.endsAt ?? null}, ${e.allDay ?? false}, ${e.color ?? null})
         on conflict (source, connection_id, external_id) do update set
-          title = excluded.title, starts_at = excluded.starts_at, ends_at = excluded.ends_at,
+          title = excluded.title, starts_at = excluded.starts_at, ends_at = excluded.ends_at, calendar_id = excluded.calendar_id,
           location = excluded.location, all_day = excluded.all_day, updated_at = now()`;
     }
   });
+}
+
+export type CalendarInput = { id: string; name: string; color?: string | null; account?: string | null; hiddenByDefault?: boolean };
+
+/**
+ * Records the calendars a connection currently has (dropping ones that disappeared) and returns the
+ * IDs of newly seen calendars that should start hidden (e.g. unchecked in Google Calendar).
+ */
+export async function syncCalendarList(connectionId: string, list: CalendarInput[]): Promise<string[]> {
+  const startHidden: string[] = [];
+  for (const c of list) {
+    const rows = await sql<{ inserted: boolean }[]>`
+      insert into calendars (id, connection_id, name, color, account)
+      values (${c.id}, ${connectionId}, ${c.name.slice(0, 200)}, ${c.color ?? null}, ${c.account ?? null})
+      on conflict (id) do update set name = excluded.name, color = excluded.color, account = excluded.account
+      returning (xmax = 0) as inserted`;
+    if (rows[0]?.inserted && c.hiddenByDefault) startHidden.push(c.id);
+  }
+  const keep = list.map((c) => c.id);
+  await sql`delete from calendars where connection_id = ${connectionId} and not (id = any(${keep}::text[]))`;
+  return startHidden;
 }
 
 // ---------- Tasks (assignments + reminders) ----------

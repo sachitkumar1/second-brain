@@ -82,6 +82,9 @@ Signing in only proves who you are. To bring in email, calendar and files, conne
 (personal Gmail, berkeley.edu, …) under **Settings → Connections → Google → Connect a Google account**.
 Google shows "Google hasn't verified this app"; click **Advanced → Go to Apollo**. Access is read-only.
 
+Every calendar on the account is synced. Choose which ones appear under **Settings → Calendars** or the **Calendars** menu on the
+Today and Week ahead widgets. Calendars you've unchecked in Google Calendar start out hidden.
+
 **If your berkeley.edu account is blocked** ("Access blocked: your institution's admin needs to review…"):
 - Email: in bMail, **Settings → Forwarding and POP/IMAP → Add a forwarding address** → your connected Gmail.
 - Calendar: in Berkeley Google Calendar, open the calendar's **Settings → Integrate calendar → Secret address in iCal format**,

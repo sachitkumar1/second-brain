@@ -24,7 +24,7 @@ function localToUtc(dayOffset: number, hhmm: string): Date {
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000);
 
 async function main() {
-  await sql`truncate items, events, tasks, alerts, digests, reply_queue, reply_dismissals, reply_waiting, connections, run_log, notification_log cascade`;
+  await sql`truncate items, events, tasks, alerts, digests, reply_queue, reply_dismissals, reply_waiting, calendars, connections, run_log, notification_log cascade`;
   await sql`delete from settings`;
 
   const [google] = await sql`insert into connections (type, label, account, status, last_sync_at) values ('google', 'sachitkumar2025@gmail.com', 'sachitkumar2025@gmail.com', 'ok', now()) returning id`;
@@ -36,9 +36,13 @@ async function main() {
   await sql`insert into connections (type, label, config, status, last_sync_at) values ('webpage', 'DATA 100 site', ${sql.json({ url: "https://ds100.org/fa26/", course: "DATA 100" })}, 'ok', now())`;
 
   // Calendar
+  const cals: Record<string, string> = { Classes: "#2563eb", Clubs: "#c2410c", Personal: "#be123c", Academic: "#a16207", "US Holidays": "#0d9488" };
+  for (const [name, color] of Object.entries(cals))
+    await sql`insert into calendars (id, connection_id, name, color, account) values (${`${google.id}:${name}`}, ${google.id}, ${name}, ${color}, 'sachitkumar2025@gmail.com')`;
+  await sql`insert into settings (key, value) values ('app', ${sql.json({ hiddenCalendars: [`${google.id}:US Holidays`] })})`;
   const ev = (d: number, s: string, e: string, title: string, loc: string | null, color: string, cal = "Classes") =>
-    sql`insert into events (connection_id, source, external_id, calendar, title, location, starts_at, ends_at, color)
-        values (${google.id}, 'gcal', ${`${title}-${d}-${s}`}, ${cal}, ${title}, ${loc}, ${localToUtc(d, s)}, ${localToUtc(d, e)}, ${color})`;
+    sql`insert into events (connection_id, source, external_id, calendar_id, calendar, title, location, starts_at, ends_at, color)
+        values (${google.id}, 'gcal', ${`${title}-${d}-${s}`}, ${`${google.id}:${cal}`}, ${cal}, ${title}, ${loc}, ${localToUtc(d, s)}, ${localToUtc(d, e)}, ${color})`;
   for (const d of [0, 2, 4]) await ev(d, "09:30", "11:00", "DATA C100 Lecture", "Wheeler 150", "#2563eb");
   for (const d of [0, 2]) await ev(d, "14:00", "15:00", "MATH 110 Lecture", "Evans 10", "#7c3aed");
   await ev(1, "11:00", "12:30", "STAT 134 Lecture", "Li Ka Shing 245", "#0d9488");
@@ -48,7 +52,8 @@ async function main() {
   await ev(1, "15:00", "16:00", "Coffee chat — Jane Street recruiter", "Zoom", "#be123c", "Personal");
   await ev(3, "17:00", "18:00", "MATH 110 Discussion", "Evans 75", "#7c3aed");
   await ev(5, "10:00", "12:00", "Study group: STAT 134 midterm", "Moffitt 4th floor", "#0d9488", "Personal");
-  await sql`insert into events (connection_id, source, external_id, calendar, title, starts_at, ends_at, all_day, color) values (${google.id}, 'gcal', 'allday', 'Academic', 'Last day to drop with W', ${localToUtc(2, "00:00")}, ${localToUtc(3, "00:00")}, true, '#a16207')`;
+  await sql`insert into events (connection_id, source, external_id, calendar_id, calendar, title, starts_at, ends_at, all_day, color) values (${google.id}, 'gcal', 'allday', ${`${google.id}:Academic`}, 'Academic', 'Last day to drop with W', ${localToUtc(2, "00:00")}, ${localToUtc(3, "00:00")}, true, '#a16207')`;
+  await sql`insert into events (connection_id, source, external_id, calendar_id, calendar, title, starts_at, ends_at, all_day, color) values (${google.id}, 'gcal', 'hol', ${`${google.id}:US Holidays`}, 'US Holidays', 'Halloween', ${localToUtc(5, "00:00")}, ${localToUtc(6, "00:00")}, true, '#0d9488')`;
 
   // Assignments
   const asg = (src: string, conn: string, id: string, title: string, course: string, due: Date, submitted = false, url = "https://bcourses.berkeley.edu") =>

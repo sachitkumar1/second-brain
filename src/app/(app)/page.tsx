@@ -13,13 +13,14 @@ import {
   MessagesSquare,
   Sparkles,
 } from "lucide-react";
+import { CalendarPicker } from "@/components/CalendarPicker";
 import { Feed } from "@/components/Feed";
 import { RemindersWidget } from "@/components/RemindersWidget";
 import { ReplyQueue } from "@/components/ReplyQueue";
 import { Widget } from "@/components/ui";
 import { BriefBody, DeadlinesBody, DriveBody, TodayBody, WeekBody } from "@/components/widgets";
 import { requireSession } from "@/lib/auth";
-import { getDashboardData } from "@/lib/queries";
+import { getCalendars, getDashboardData } from "@/lib/queries";
 import { getKV, getSettings, WIDGETS, type WidgetId } from "@/lib/settings";
 import { addDays, greeting, localDate, zonedToUtc } from "@/lib/time";
 import { toItemView, toTaskView } from "@/lib/views";
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
   const settings = await getSettings();
   const d = await getDashboardData(settings);
   const agentSeen = await getKV<{ at: string }>("agent_last_seen");
+  const calendars = await getCalendars(settings.hiddenCalendars);
   const { now, tz } = d;
   const aliases = settings.courseAliases;
   const today = d.today;
@@ -102,7 +104,7 @@ export default async function DashboardPage() {
       </Widget>
     ),
     today: (
-      <Widget title="Today" icon={<CalendarClock />} count={d.events.length || null}>
+      <Widget title="Today" icon={<CalendarClock />} count={d.events.length || null} action={<CalendarPicker calendars={calendars} />}>
         <TodayBody events={d.events} dueToday={dueTodayAll.map((t) => ({ ...view(t), at: new Date(t.due_at!) }))} now={now} tz={tz} />
       </Widget>
     ),
@@ -164,7 +166,7 @@ export default async function DashboardPage() {
       </Widget>
     ),
     week: (
-      <Widget title="Week ahead" icon={<CalendarRange />}>
+      <Widget title="Week ahead" icon={<CalendarRange />} action={<CalendarPicker calendars={calendars} />}>
         <WeekBody
           events={d.weekEvents}
           tasks={assignments.filter((t) => new Date(t.due_at!) >= d.dayStart && new Date(t.due_at!) < weekEnd).map((t) => ({ ...view(t), at: new Date(t.due_at!) }))}

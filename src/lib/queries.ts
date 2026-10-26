@@ -1,4 +1,5 @@
 import "server-only";
+import type { CalendarOption } from "@/components/CalendarPicker";
 import { sql } from "./db";
 import { courseKey } from "./courses";
 import type { Settings } from "./settings";
@@ -35,10 +36,12 @@ export async function getDashboardData(settings: Settings, now = new Date()) {
       sql<EventRow[]>`
         select id, title, starts_at, ends_at, all_day, location, calendar, color, url, source from events
         where starts_at < ${tomorrowStart} and coalesce(ends_at, starts_at) > ${dayStart}
+          and (calendar_id is null or calendar_id <> all(${settings.hiddenCalendars}::text[]))
         order by all_day desc, starts_at`,
       sql<EventRow[]>`
         select id, title, starts_at, ends_at, all_day, location, calendar, color, url, source from events
         where starts_at >= ${dayStart} and starts_at < ${weekEnd}
+          and (calendar_id is null or calendar_id <> all(${settings.hiddenCalendars}::text[]))
         order by starts_at`,
       sql<Task[]>`
         select * from tasks where status = 'open'
@@ -91,6 +94,16 @@ export async function getDashboardData(settings: Settings, now = new Date()) {
     connections: conns,
     lastTick: lastTick[0] ?? null,
   };
+}
+
+/** All synced calendars with their visibility, for the calendar toggles. */
+export async function getCalendars(hidden: string[]): Promise<CalendarOption[]> {
+  const rows = await sql<{ id: string; name: string; color: string | null; account: string | null }[]>`
+    select c.id, c.name, c.color, c.account from calendars c
+    join connections k on k.id = c.connection_id
+    where k.enabled
+    order by c.account nulls last, c.name`;
+  return rows.map((r) => ({ ...r, hidden: hidden.includes(r.id) }));
 }
 
 /** Every course seen anywhere, for the Classes page and settings. */

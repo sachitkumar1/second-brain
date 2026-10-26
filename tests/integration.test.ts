@@ -46,7 +46,7 @@ describe.skipIf(!DB)("scheduler, digest and triage", () => {
   beforeEach(async () => {
     sent.length = 0;
     structuredCall.mockReset();
-    await sql`truncate tasks, items, events, alerts, notification_log, digests, connections cascade`;
+    await sql`truncate tasks, items, events, alerts, notification_log, digests, calendars, connections cascade`;
     await sql`delete from settings`;
     await settings.saveSettings({ notifications: { email: true, push: false, quietHours: { enabled: true, start: "23:00", end: "07:30" }, rules: {} } });
   });
@@ -134,6 +134,32 @@ describe.skipIf(!DB)("scheduler, digest and triage", () => {
     expect(updated).toMatchObject({ importance: 3, ai_status: "done", course: "MATH 110" });
     const prompt = structuredCall.mock.calls[0][0].user as string;
     expect(prompt).toContain("Problem Set 6"); // tracked assignments are given to the model
+  });
+
+  it("hides events from calendars you've turned off, and starts Google-unchecked calendars hidden", async () => {
+    const store = await import("@/lib/store");
+    const [conn] = await sql`insert into connections (type, label, account) values ('google', 'me@gmail.com', 'me@gmail.com') returning id`;
+    const startHidden = await store.syncCalendarList(conn.id, [
+      { id: `${conn.id}:primary`, name: "me@gmail.com" },
+      { id: `${conn.id}:holidays`, name: "Holidays", hiddenByDefault: true },
+    ]);
+    expect(startHidden).toEqual([`${conn.id}:holidays`]);
+    await settings.hideCalendars(startHidden);
+    // Seeing the same calendars again doesn't re-hide one you've since turned back on.
+    await settings.saveSettings({ hiddenCalendars: [] });
+    expect(await store.syncCalendarList(conn.id, [{ id: `${conn.id}:holidays`, name: "Holidays", hiddenByDefault: true }])).toEqual([]);
+    expect((await sql`select id from calendars`).map((r: { id: string }) => r.id)).toEqual([`${conn.id}:holidays`]);
+
+    const at = (h: number) => new Date(NOON.getTime() + h * 3_600_000);
+    await sql`insert into events (connection_id, source, external_id, calendar_id, title, starts_at, ends_at) values
+      (${conn.id}, 'gcal', 'a', ${`${conn.id}:primary`}, 'Lecture', ${at(1)}, ${at(2)}),
+      (${conn.id}, 'gcal', 'b', ${`${conn.id}:holidays`}, 'Some holiday', ${at(1)}, ${at(2)})`;
+    await settings.saveSettings({ hiddenCalendars: [`${conn.id}:holidays`] });
+    const d = await digest.buildDigestData(await settings.getSettings(), NOON);
+    expect(d.events.map((e: { title: string }) => e.title)).toEqual(["Lecture"]);
+    await settings.saveSettings({ hiddenCalendars: [] });
+    const all = await digest.buildDigestData(await settings.getSettings(), NOON);
+    expect(all.events).toHaveLength(2);
   });
 
   it("raises alerts for new class items per your rules", async () => {

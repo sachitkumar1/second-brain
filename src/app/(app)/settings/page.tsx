@@ -11,6 +11,7 @@ import {
   sendTestEmail,
 } from "@/app/actions";
 import { ActionButton } from "@/components/ActionButton";
+import { CalendarSettings } from "@/components/CalendarPicker";
 import { ActionForm } from "@/components/settings/ActionForm";
 import { AgentPairing } from "@/components/settings/AgentPairing";
 import { ConnectionCard, type ConnectionView } from "@/components/settings/ConnectionCard";
@@ -23,7 +24,7 @@ import { sql } from "@/lib/db";
 import { appUrl, env } from "@/lib/env";
 import { emailConfigured } from "@/lib/notify/email";
 import { pushConfigured } from "@/lib/notify/push";
-import { getCourses } from "@/lib/queries";
+import { getCalendars, getCourses } from "@/lib/queries";
 import { getKV, getSettings, WIDGETS } from "@/lib/settings";
 import { listConnections } from "@/lib/store";
 import { fmtAgo } from "@/lib/time";
@@ -35,6 +36,7 @@ export const metadata: Metadata = { title: "Settings" };
 
 const SECTIONS = [
   ["general", "General"],
+  ["calendars", "Calendars"],
   ["notifications", "Notifications"],
   ["connections", "Connections"],
   ["agent", "Mac agent"],
@@ -86,6 +88,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const s = await getSettings();
   const conns = await listConnections();
   const courses = await getCourses();
+  const calendars = await getCalendars(s.hiddenCalendars);
   const agentSeen = await getKV<{ at: string }>("agent_last_seen");
   const agentPaired = !!(await getKV<string>("agent_token_hash"));
   const runs = await sql<{ id: number; kind: string; started_at: Date; ok: boolean | null; detail: Record<string, unknown> | null }[]>`
@@ -165,6 +168,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <div className="mt-4 border-t border-line-2 pt-4">
             <ActionButton action={sendTestEmail}>Send a test email</ActionButton>
           </div>
+        </Section>
+
+        <Section
+          id="calendars"
+          title="Calendars"
+          description="Choose which calendars appear on your dashboard and in the daily digest. Unchecked calendars keep syncing, so turning one back on is instant."
+        >
+          <CalendarSettings calendars={calendars} />
         </Section>
 
         <Section id="notifications" title="Notifications" description="What's important enough to email you right away. Everything else waits for the digest.">

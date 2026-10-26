@@ -76,6 +76,7 @@ export async function buildDigestData(settings: Settings, now = new Date()): Pro
     sql<{ title: string; starts_at: Date; ends_at: Date | null; all_day: boolean; location: string | null; calendar: string | null }[]>`
       select title, starts_at, ends_at, all_day, location, calendar from events
       where starts_at < ${dayEnd} and coalesce(ends_at, starts_at) > ${dayStart}
+        and (calendar_id is null or calendar_id <> all(${settings.hiddenCalendars}::text[]))
       order by all_day desc, starts_at`,
     sql<Task[]>`select * from tasks where status = 'open' order by due_at nulls last, priority desc`,
     sql<Item[]>`
