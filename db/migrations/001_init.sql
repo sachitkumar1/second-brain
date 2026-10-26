@@ -172,12 +172,6 @@ create table if not exists push_subscriptions (
   created_at timestamptz not null default now()
 );
 
-create table if not exists login_attempts (
-  ip text not null,
-  at timestamptz not null default now()
-);
-create index if not exists login_attempts_idx on login_attempts (ip, at);
-
 -- Run log shown under Settings → System so you can see what the agent did and any errors.
 create table if not exists run_log (
   id          bigserial primary key,

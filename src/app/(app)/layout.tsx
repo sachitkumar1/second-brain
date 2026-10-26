@@ -3,14 +3,14 @@ import { LogOut } from "lucide-react";
 import { logout } from "@/app/actions";
 import { Nav } from "@/components/Nav";
 import { SyncButton } from "@/components/SyncButton";
-import { requireSession } from "@/lib/auth";
+import { currentEmail } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { fmtAgo } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  await requireSession();
+  const email = await currentEmail();
   const [row] = await sql<{ at: Date | null }[]>`select max(last_sync_at) as at from connections where enabled`;
   const lastSync = row?.at ? `${fmtAgo(row.at)} ago`.replace("now ago", "just now") : null;
 
@@ -27,8 +27,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <div className="ml-auto flex items-center gap-2">
             <SyncButton lastSync={lastSync} />
+            <span className="hidden max-w-[220px] truncate text-xs text-muted lg:inline" title={`Signed in as ${email}`}>
+              {email}
+            </span>
             <form action={logout}>
-              <button className="rounded-lg p-2 text-muted transition hover:bg-surface-2 hover:text-ink" aria-label="Sign out" title="Sign out">
+              <button className="rounded-lg p-2 text-muted transition hover:bg-surface-2 hover:text-ink" aria-label={`Sign out ${email}`} title="Sign out">
                 <LogOut className="h-4 w-4" />
               </button>
             </form>

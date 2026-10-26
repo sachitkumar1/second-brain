@@ -1,12 +1,19 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE, verifySession } from "./session";
+import { SESSION_COOKIE, sessionEmail, verifySession } from "./session";
 
 /** Throws a redirect to /login when there is no valid session. Use in pages and server actions. */
 export async function requireSession(): Promise<void> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!(await verifySession(token))) redirect("/login");
+}
+
+/** The Google account you're signed in with. Redirects to /login when signed out. */
+export async function currentEmail(): Promise<string> {
+  const email = await sessionEmail((await cookies()).get(SESSION_COOKIE)?.value);
+  if (!email) redirect("/login");
+  return email;
 }
 
 export async function isAuthed(): Promise<boolean> {

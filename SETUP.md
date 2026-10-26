@@ -1,27 +1,28 @@
 # Setup guide
 
-About an hour end to end. Steps 1–3 get the dashboard online; the rest connect your accounts.
-Everything after step 3 can be done in any order, and the dashboard works with whatever you've connected so far.
+About an hour end to end. Steps 1–4 get the dashboard online and let you sign in; the rest connect your accounts.
+Everything after step 4 can be done in any order, and the dashboard works with whatever you've connected so far.
 
 | Step | What | Time |
 |---|---|---|
 | 1 | Deploy to Vercel | 5 min |
 | 2 | Create the database | 2 min |
-| 3 | Secrets, password, email sending | 10 min |
-| 4 | Google: Gmail, Calendar, Drive | 10 min |
-| 5 | Classes: bCourses, Gradescope, Ed, course sites | 10 min |
-| 6 | Slack | 5 min per workspace |
-| 7 | Scheduler (every 10 minutes) | 3 min |
-| 8 | Mac agent: iMessage and Instagram reply queue | 10 min |
-| 9 | AI agent | 2 min |
+| 3 | Google sign-in (OAuth client) | 10 min |
+| 4 | Secrets and email sending, then sign in | 10 min |
+| 5 | Connect Gmail, Calendar, Drive | 5 min |
+| 6 | Classes: bCourses, Gradescope, Ed, course sites | 10 min |
+| 7 | Slack | 5 min per workspace |
+| 8 | Scheduler (every 10 minutes) | 3 min |
+| 9 | Mac agent: iMessage and Instagram reply queue | 10 min |
+| 10 | AI agent | 2 min |
 
 ---
 
 ## 1. Deploy to Vercel
 
 1. Go to [vercel.com/new](https://vercel.com/new), import this GitHub repository, and keep the defaults (Framework: Next.js).
-2. Click **Deploy**. The first deploy finishes, but the site shows an error until steps 2–3 are done. That's expected.
-3. Note your URL, e.g. `https://apollo-sachit.vercel.app`. Below it's called `APP`.
+2. Click **Deploy**. The first deploy finishes, but the site shows an error until steps 2–4 are done. That's expected.
+3. Note your URL, e.g. `https://second-brain-sachit.vercel.app`. Below it's called `APP`.
 
 ## 2. Create the database
 
@@ -33,13 +34,33 @@ Vercel adds `DATABASE_URL` for you. The schema is created automatically on every
 (Alternative: a free project in a *personal* Supabase organization. Copy the "Transaction pooler" connection string
 from Project Settings → Database and set it as `DATABASE_URL`.)
 
-## 3. Secrets, password and email sending
+## 3. Google sign-in (OAuth client)
+
+You sign in to the dashboard with Google, and only **sachitkumar2025@gmail.com** and **sachitk@berkeley.edu** are let in.
+Any other Google account is turned away, and there's no password to leak.
+The same OAuth client is also used later to read Gmail, Calendar and Drive.
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → create a project named **Apollo**.
+2. **APIs & Services → Library**: enable **Gmail API**, **Google Calendar API**, and **Google Drive API** (used in step 5).
+3. **Google Auth Platform → Branding / Audience** (the "OAuth consent screen"): User type **External**, app name "Apollo",
+   your email as support and developer contact. Under **Audience**, click **Publish app** so it's *In production*.
+   (In "Testing" mode Google expires connected accounts every 7 days.) You don't need Google's verification for personal use.
+4. **Clients → Create client → Web application**. Add **both** authorized redirect URIs:
+   - `APP/api/auth/google/callback` (signing in to the dashboard)
+   - `APP/api/oauth/google/callback` (connecting Gmail, Calendar and Drive)
+
+   For local development, also add `http://localhost:3000/api/auth/google/callback` and `http://localhost:3000/api/oauth/google/callback`.
+5. In Vercel → Project → **Settings → Environment Variables**, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from the client you created.
+
+To change who can sign in, set `ALLOWED_EMAILS` to a comma-separated list (it defaults to the two addresses above).
+Removing an address signs that account out on its next request.
+
+## 4. Secrets and email sending, then sign in
 
 In Vercel → Project → **Settings → Environment Variables**, add the following (all environments):
 
 | Variable | Value |
 |---|---|
-| `DASHBOARD_PASSWORD` | The password you'll use to open the dashboard. Make it long. |
 | `SESSION_SECRET`, `ENCRYPTION_KEY`, `CRON_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Run `npm install && npm run secrets` locally and paste the output. |
 | `GMAIL_SENDER` | `sachitagent29@gmail.com` |
 | `GMAIL_APP_PASSWORD` | See below |
@@ -49,31 +70,27 @@ In Vercel → Project → **Settings → Environment Variables**, add the follow
 turn on **2-Step Verification** → open [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → create one named
 "Apollo" → paste the 16-character password (without spaces) as `GMAIL_APP_PASSWORD`.
 
-Then **Deployments → ⋯ → Redeploy**. Open `APP`, sign in, go to **Settings → General → Send a test email**.
+Then **Deployments → ⋯ → Redeploy**. Open `APP` → **Sign in with Google** with either allowed account →
+**Settings → General → Send a test email**.
 
 > `ENCRYPTION_KEY` encrypts every stored token and password. If you change it later, reconnect your accounts.
+> Changing `SESSION_SECRET` signs you out everywhere.
 
-## 4. Google: Gmail, Calendar, Drive
+## 5. Connect Gmail, Calendar, Drive
 
-One OAuth client covers all of your Google accounts (personal Gmail, berkeley.edu, …).
-
-1. [console.cloud.google.com](https://console.cloud.google.com) → create a project named **Apollo**.
-2. **APIs & Services → Library**: enable **Gmail API**, **Google Calendar API**, and **Google Drive API**.
-3. **Google Auth Platform → Branding / Audience** (the "OAuth consent screen"): User type **External**, app name "Apollo",
-   your email as support and developer contact. Under **Audience**, click **Publish app** so it's *In production*.
-   (In "Testing" mode Google expires your sign-in every 7 days.) You don't need verification for personal use.
-4. **Clients → Create client → Web application**. Add the authorized redirect URI
-   `APP/api/oauth/google/callback`.
-5. Copy the client ID and secret into Vercel as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then redeploy.
-6. In the dashboard: **Settings → Connections → Google → Connect a Google account**. Google shows "Google hasn't verified this app";
-   click **Advanced → Go to Apollo**. Access is read-only. Repeat for each account.
+Signing in only proves who you are. To bring in email, calendar and files, connect each Google account
+(personal Gmail, berkeley.edu, …) under **Settings → Connections → Google → Connect a Google account**.
+Google shows "Google hasn't verified this app"; click **Advanced → Go to Apollo**. Access is read-only.
 
 **If your berkeley.edu account is blocked** ("Access blocked: your institution's admin needs to review…"):
 - Email: in bMail, **Settings → Forwarding and POP/IMAP → Add a forwarding address** → your connected Gmail.
 - Calendar: in Berkeley Google Calendar, open the calendar's **Settings → Integrate calendar → Secret address in iCal format**,
   and add that link under **Settings → Connections → Calendar feed**.
 
-## 5. Classes
+Signing in to the dashboard with sachitk@berkeley.edu only asks Google for your name and email, which Berkeley normally allows
+even when it blocks Gmail access. If it's blocked too, sign in with sachitkumar2025@gmail.com.
+
+## 6. Classes
 
 All under **Settings → Connections**:
 
@@ -89,7 +106,7 @@ All under **Settings → Connections**:
 - **Pensieve and CalCentral** can't be connected directly: there's no API, and CalNet requires Duo. Their notification emails are recognized
   in Gmail and shown under Classes, so make sure those notifications go to a connected inbox.
 
-## 6. Slack
+## 7. Slack
 
 For each workspace:
 
@@ -102,7 +119,7 @@ For each workspace:
 
 You'll get @-mentions, the chosen channels, and a list of DMs waiting on your reply.
 
-## 7. Scheduler
+## 8. Scheduler
 
 Everything (syncing, reminders, alerts, the morning digest) runs from one endpoint that should be called every 10 minutes.
 Vercel's free plan only runs cron once a day (`vercel.json` includes that as a fallback), so use a free external scheduler:
@@ -114,7 +131,7 @@ Vercel's free plan only runs cron once a day (`vercel.json` includes that as a f
 
 **Settings → System** shows a green "Scheduler running" once it's working, plus a log of recent runs.
 
-## 8. Mac agent: iMessage and Instagram
+## 9. Mac agent: iMessage and Instagram
 
 The reply queue needs a small script on your Mac, because iMessage data only exists there.
 
@@ -141,7 +158,7 @@ For live data with an Instagram *professional* (creator) account, see [agent/REA
 
 See [How the reply queue stays private](README.md#privacy-and-security) for what is and isn't uploaded.
 
-## 9. AI agent
+## 10. AI agent
 
 Create an API key at [console.anthropic.com](https://console.anthropic.com) → **API keys** and set it as `ANTHROPIC_API_KEY`, then redeploy.
 
@@ -159,11 +176,12 @@ You can also turn off AI for email or Slack in **Settings → General**.
 
 ```bash
 npm install
-cp .env.example .env.local                 # fill in DATABASE_URL (a local Postgres works) and the secrets
+cp .env.example .env.local                 # DATABASE_URL (a local Postgres works), the secrets, and the Google client
 npm run db:migrate
 npx tsx scripts/seed-demo.ts               # optional: realistic sample data (reply-queue passphrase: "demo passphrase")
 npm run dev
 ```
 
+Signing in locally needs `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and the localhost redirect URIs from step 3.
 Set `EMAIL_DUMP_DIR=./.email-dump` in `.env.local` to write emails to disk instead of sending them.
 Run tests with `npm test`. Set `TEST_DATABASE_URL` to an empty Postgres database to include the integration tests.

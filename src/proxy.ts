@@ -4,6 +4,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 // Routes that authenticate themselves (bearer secrets or signed tokens) or must be public.
 const PUBLIC_PREFIXES = [
   "/login",
+  "/api/auth/",
   "/api/cron/",
   "/api/agent/",
   "/api/act",

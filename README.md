@@ -80,7 +80,9 @@ Snoozes are stored as opaque hashes keyed with a passphrase-derived secret, so t
 With the Instagram API option, the agent requests only sender and timestamp fields, never message content.
 
 **Everything else:**
-- The dashboard requires your password. Sessions are signed, HttpOnly, Secure cookies (30 days), and login attempts are rate-limited.
+- **Sign in with Google**, and only allowlisted accounts get in: by default `sachitkumar2025@gmail.com` and `sachitk@berkeley.edu`
+  (`ALLOWED_EMAILS`). The flow uses state, nonce and PKCE, and Google's signed ID token is verified. Sessions are signed, HttpOnly,
+  Secure cookies (30 days), re-checked against the allowlist on every request.
 - Every OAuth token, API token and the Gradescope password is encrypted at rest with AES-256-GCM (`ENCRYPTION_KEY`) and never
   sent to the browser. Google access is read-only.
 - The scheduler and Mac agent authenticate with secrets; only the agent token's hash is stored.

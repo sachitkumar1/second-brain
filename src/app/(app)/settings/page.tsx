@@ -232,7 +232,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   Connect a Google account
                 </a>
               ) : (
-                <p className="text-sm text-amber">Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server first (SETUP.md, step 4).</p>
+                <p className="text-sm text-amber">Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server first (SETUP.md, step 3).</p>
               )}
             </AddCard>
             <AddCard title="bCourses (Canvas)" how={<>bCourses → Account → Settings → Approved Integrations → “+ New Access Token”. Copy the token here.</>}>
@@ -430,7 +430,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <Check
               ok={!!runs.find((x) => x.kind === "tick" && now.getTime() - new Date(x.started_at).getTime() < 45 * 60_000)}
               label="Scheduler running"
-              hint="No agent run in the last 45 minutes. Check your cron job (SETUP.md, step 7)."
+              hint="No agent run in the last 45 minutes. Check your cron job (SETUP.md, step 8)."
             />
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">

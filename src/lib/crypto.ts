@@ -1,5 +1,5 @@
 import "server-only";
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
 
 function key(): Buffer {
@@ -36,25 +36,4 @@ export function safeEqual(a: string, b: string): boolean {
   const ha = createHash("sha256").update(a).digest();
   const hb = createHash("sha256").update(b).digest();
   return timingSafeEqual(ha, hb);
-}
-
-/** Format: scrypt$<salt b64url>$<hash b64url>. Generate with `npm run hash-password`. */
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 32);
-  return `scrypt$${salt.toString("base64url")}$${hash.toString("base64url")}`;
-}
-
-export function verifyPassword(password: string): boolean {
-  const stored = env.dashboardPasswordHash();
-  if (stored) {
-    const [scheme, saltB64, hashB64] = stored.split("$");
-    if (scheme !== "scrypt" || !saltB64 || !hashB64) return false;
-    const expected = Buffer.from(hashB64, "base64url");
-    const actual = scryptSync(password, Buffer.from(saltB64, "base64url"), expected.length);
-    return timingSafeEqual(expected, actual);
-  }
-  const plain = env.dashboardPassword();
-  if (!plain) return false;
-  return safeEqual(password, plain);
 }
