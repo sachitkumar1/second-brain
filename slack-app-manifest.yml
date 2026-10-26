@@ -1,0 +1,25 @@
+# Paste this at https://api.slack.com/apps → Create New App → From an app manifest,
+# pick the workspace, then "Install to Workspace" and copy the User OAuth Token (xoxp-…).
+# Repeat for each workspace you want on the dashboard.
+display_information:
+  name: Apollo
+  description: Read-only access for my personal dashboard
+  background_color: "#003262"
+oauth_config:
+  scopes:
+    user:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - im:history
+      - im:read
+      - mpim:history
+      - mpim:read
+      - users:read
+      - search:read
+      - team:read
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

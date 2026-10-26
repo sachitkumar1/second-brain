@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* Brand tokens. Berkeley navy for structure, California gold as the single signature accent. */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --ink: #0e1726;
+  --ink-2: #344054;
+  --muted: #667085;
+  --line: #e4e7ec;
+  --line-2: #eef0f3;
+  --navy: #003262;
+  --navy-hover: #00264b;
+  --on-navy: #ffffff;
+  --link: #1d4f91;
+  --gold: #fdb515;
+  --gold-soft: #fff6dc;
+  --red: #b42318;
+  --red-soft: #fef3f2;
+  --amber: #b54708;
+  --amber-soft: #fffaeb;
+  --green: #067647;
+  --green-soft: #ecfdf3;
+  --ring: #3b6fb6;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.04);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0e15;
+    --surface: #111722;
+    --surface-2: #161d2a;
+    --ink: #e7eaf0;
+    --ink-2: #c3c9d4;
+    --muted: #8a93a5;
+    --line: #232c3b;
+    --line-2: #1b2331;
+    --navy: #7ea6dd;
+    --navy-hover: #9bbbe6;
+    --on-navy: #0a0e15;
+    --link: #9bbbe6;
+    --gold: #fdb515;
+    --gold-soft: #2b2310;
+    --red: #f97066;
+    --red-soft: #2b1515;
+    --amber: #fdb022;
+    --amber-soft: #2a1f0c;
+    --green: #47cd89;
+    --green-soft: #0f2a1d;
+    --ring: #7ea6dd;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-navy: var(--navy);
+  --color-navy-hover: var(--navy-hover);
+  --color-on-navy: var(--on-navy);
+  --color-link: var(--link);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --shadow-card: var(--shadow);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Thin, quiet scrollbars inside widgets. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
