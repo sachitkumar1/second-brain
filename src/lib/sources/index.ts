@@ -73,8 +73,8 @@ export async function syncConnection(conn: Connection, settings: Settings, now =
   try {
     const result: SyncResult = await adapter.sync({ conn, settings, now, backfill });
     await updateConnection(conn.id, {
-      status: "ok",
-      last_error: null,
+      status: result.warning ? "partial" : "ok",
+      last_error: result.warning ?? null,
       ...(result.cursor ? { cursor: result.cursor } : {}),
       ...(result.secret !== undefined ? { secret: result.secret } : {}),
       ...(result.account ? { account: result.account } : {}),

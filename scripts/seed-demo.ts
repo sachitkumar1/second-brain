@@ -151,6 +151,10 @@ async function main() {
      ${sql.json(["Grading: 25% homework, 15% labs, 20% projects, 15% midterm, 25% final", "5 slip days total for homework and projects", "Midterm 2: Thu Nov 12, 7–9 PM (Pimentel)", "Lowest 2 lab scores dropped"])}, ${hoursAgo(5)}),
     ('webpage', 'site', null, 'DATA 100', 'DATA 100 site', 'https://ds100.org/fa26/', 'x', 'h2', 'done', 14, '[]'::jsonb, ${hoursAgo(1)}),
     ('canvas', ${canvas.id + ":2"}, ${canvas.id}, 'STAT 134', 'STAT 134 syllabus (bCourses)', 'https://bcourses.berkeley.edu', 'x', 'h3', 'pending', 0, '[]'::jsonb, null)`;
+  const [dsSyl] = await sql`select id from syllabi where title = 'DATA 100 syllabus (bCourses)'`;
+  await sql`insert into tasks (source, kind, external_id, title, course, due_at, priority, notes) values
+    ('syllabus', 'assignment', ${dsSyl.id + ":midterm-2:x"}, 'Midterm 2', 'DATA 100', ${localToUtc(17, "19:00")}, 3, 'Exam · Pimentel'),
+    ('syllabus', 'assignment', ${dsSyl.id + ":project-2:x"}, 'Project 2 Final', 'DATA 100', ${localToUtc(24, "23:59")}, 2, null)`;
   await sql`insert into syllabi (source, course, title, content_text, content_hash, status, item_count, highlights, extracted_at) values
     ('upload', 'MATH 110', 'MATH 110 Syllabus Fall 2026', 'x', 'h4', 'done', 6, ${sql.json(["Homework due Wednesdays 11:59 PM on Gradescope", "No late homework; lowest score dropped"])}, ${hoursAgo(26)})`;
 

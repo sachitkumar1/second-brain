@@ -2,7 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, FileText, Globe, GraduationCap, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useActionState, useRef, useState, useTransition } from "react";
-import { removeSyllabus, rescanSyllabusNow, uploadSyllabus, type ActionResult } from "@/app/actions";
+import { readWebsiteNow, removeSyllabus, rescanSyllabusNow, uploadSyllabus, type ActionResult } from "@/app/actions";
 import { buttonClass, cx, Empty, inputClass } from "./ui";
 
 export type SyllabusView = {
@@ -15,7 +15,11 @@ export type SyllabusView = {
   error: string | null;
   itemCount: number;
   readAgo: string | null;
+  /** Upcoming deadlines this source added, e.g. "HW 7 — Thu 11:59 PM". */
+  dates: string[];
 };
+
+export type UnreadSite = { id: string; label: string; url: string; course: string | null; error: string | null };
 
 const SOURCE = {
   upload: { label: "Uploaded", Icon: FileText },
@@ -64,6 +68,19 @@ function Row({ s }: { s: SyllabusView }) {
           <span>· {status}</span>
         </p>
         {msg?.message && <p className={cx("mt-1 text-xs", msg.ok ? "text-green" : "text-red")}>{msg.message}</p>}
+        {s.dates.length > 0 && (
+          <details className="mt-1 text-xs">
+            <summary className="cursor-pointer text-link">Upcoming dates it added ({s.dates.length})</summary>
+            <ul className="mt-1 space-y-0.5 pl-3 text-muted">
+              {s.dates.map((d, i) => (
+                <li key={i}>{d}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {s.status === "done" && s.itemCount === 0 && (
+          <p className="mt-1 text-xs text-muted">No upcoming dates found here. If the schedule is on another page, add that page under Settings → Connections.</p>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <button className={buttonClass.ghost} disabled={pending} onClick={() => run(() => rescanSyllabusNow(s.id))} title="Read it again now">
@@ -84,7 +101,42 @@ function Row({ s }: { s: SyllabusView }) {
   );
 }
 
-export function SyllabusPanel({ syllabi, courses }: { syllabi: SyllabusView[]; courses: string[] }) {
+function UnreadRow({ site }: { site: UnreadSite }) {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<ActionResult | null>(null);
+  return (
+    <li className="flex flex-wrap items-start gap-3 bg-gold-soft/40 px-4 py-3">
+      <Globe className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-ink">
+          <a href={site.url} target="_blank" rel="noreferrer" className="hover:underline">
+            {site.label}
+          </a>
+        </p>
+        <p className="mt-0.5 text-xs text-muted">
+          Course website{site.course ? ` · ${site.course}` : ""} · {site.error ? <span className="text-amber">{site.error}</span> : "schedule not read yet"}
+        </p>
+        {msg?.message && <p className={cx("mt-1 text-xs", msg.ok ? "text-green" : "text-red")}>{msg.message}</p>}
+      </div>
+      <button className={buttonClass.secondary} disabled={pending} onClick={() => start(async () => setMsg(await readWebsiteNow(site.id)))}>
+        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+        {pending ? "Reading…" : "Read now"}
+      </button>
+    </li>
+  );
+}
+
+export function SyllabusPanel({
+  syllabi,
+  courses,
+  unread = [],
+  aiReady = true,
+}: {
+  syllabi: SyllabusView[];
+  courses: string[];
+  unread?: UnreadSite[];
+  aiReady?: boolean;
+}) {
   const formRef = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<"file" | "text" | "url">("file");
   const [state, action, pending] = useActionState(async (prev: ActionResult | null, form: FormData) => {
@@ -96,8 +148,17 @@ export function SyllabusPanel({ syllabi, courses }: { syllabi: SyllabusView[]; c
   return (
     <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div className="min-w-0 border-line-2 lg:border-r">
-        {syllabi.length ? (
-          <ul className="scroll-quiet max-h-[440px] divide-y divide-line-2 overflow-y-auto">
+        {!aiReady && (
+          <p className="flex gap-2 border-b border-line-2 bg-amber-soft px-4 py-2.5 text-xs text-amber">
+            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+            Nothing can be read until an AI key is set. Add GEMINI_API_KEY in Vercel (free at aistudio.google.com/apikey), then redeploy.
+          </p>
+        )}
+        {syllabi.length || unread.length ? (
+          <ul className="scroll-quiet max-h-[480px] divide-y divide-line-2 overflow-y-auto">
+            {unread.map((u) => (
+              <UnreadRow key={u.id} site={u} />
+            ))}
             {syllabi.map((s) => (
               <Row key={s.id} s={s} />
             ))}

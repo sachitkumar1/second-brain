@@ -8,7 +8,13 @@ import { cx } from "./ui";
 export type CalendarOption = { id: string; name: string; color: string | null; account: string | null; hidden: boolean };
 
 function CalendarList({ calendars, onToggle }: { calendars: CalendarOption[]; onToggle: (id: string, hidden: boolean) => void }) {
-  if (!calendars.length) return <p className="px-3 py-2 text-xs text-muted">No calendars yet. Connect a Google account or add a calendar feed.</p>;
+  if (!calendars.length)
+    return (
+      <p className="px-3 py-2 text-xs leading-relaxed text-muted">
+        No calendars yet. They appear after a Google account syncs: press <strong>Sync</strong> at the top. If an account shows a warning under Settings →
+        Connections, fix that first. For an account that can&apos;t connect (like berkeley.edu), add its calendar as a Calendar feed.
+      </p>
+    );
   const groups = [...new Set(calendars.map((c) => c.account ?? "Calendar feeds"))];
   return (
     <div className="space-y-2">

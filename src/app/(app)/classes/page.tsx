@@ -9,7 +9,8 @@ import { requireSession } from "@/lib/auth";
 import { courseColor, courseKey, courseLabel } from "@/lib/courses";
 import { getCourseData, getCourses } from "@/lib/queries";
 import { getSettings } from "@/lib/settings";
-import { listSyllabi } from "@/lib/syllabus";
+import { datesBySyllabus, listSyllabi, unreadWebsites } from "@/lib/syllabus";
+import { aiAvailable } from "@/lib/agent/ai";
 import { fmtAgo, fmtDue } from "@/lib/time";
 import { toItemView, toTaskView } from "@/lib/views";
 
@@ -30,7 +31,7 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
   const now = new Date();
   const courses = (await getCourses()).filter((c) => !settings.hiddenCourses.includes(c));
   const { tasks, items } = await getCourseData(selected);
-  const syllabi = await listSyllabi();
+  const [syllabi, dates, unread] = await Promise.all([listSyllabi(), datesBySyllabus(), unreadWebsites()]);
   const highlights = selected
     ? syllabi.filter((s) => s.status === "done" && (courseKey(s.course) ?? s.course) === selected).flatMap((s) => s.highlights.map((h) => ({ h, from: s.title })))
     : [];
@@ -178,6 +179,8 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
       </div>
       <Widget title="Syllabi & schedules" icon={<ScrollText />} count={syllabi.filter((s) => s.status !== "ignored").length || null} className="mt-4">
         <SyllabusPanel
+          aiReady={aiAvailable()}
+          unread={unread.map((u) => ({ id: u.id, label: u.label, url: u.url, course: u.course, error: u.status !== "ok" ? u.last_error : null }))}
           courses={courses}
           syllabi={syllabi.map((s) => ({
             id: s.id,
@@ -189,6 +192,7 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
             error: s.error,
             itemCount: s.item_count,
             readAgo: s.extracted_at ? `${fmtAgo(s.extracted_at, now)} ago` : null,
+            dates: (dates.get(s.id) ?? []).map((d) => `${d.title} — ${fmtDue(d.due_at, tz, now, d.all_day)}`),
           }))}
         />
       </Widget>

@@ -4,7 +4,8 @@ import { addDays, daysBetween, fmtDue, inWindow, localDate, zonedToUtc } from "@
 import { parseAssignments, parseCourses, parseGsDate } from "@/lib/sources/gradescope";
 import { addedLines, pageLines } from "@/lib/sources/webpage";
 import { cleanSlackText } from "@/lib/sources/slack";
-import { extractBody } from "@/lib/sources/google";
+import { explainGoogleError, extractBody } from "@/lib/sources/google";
+import { HttpError } from "@/lib/http";
 import { isSameTask } from "@/lib/dedupe";
 import { jsonSchemaFor } from "@/lib/agent/ai";
 import { z } from "zod";
@@ -128,5 +129,28 @@ describe("Gemini JSON schema", () => {
     expect(s).not.toContain("9007199254740991");
     expect(s).not.toContain("$schema");
     expect(s).toContain('"required":["n","d"]');
+  });
+});
+
+describe("course website schedules", () => {
+  it("keeps each schedule-table row on one line", () => {
+    const html = `<main><h2>Schedule</h2><table>
+      <tr><th>Week</th><th>Date</th><th>Lecture</th><th>Assignments</th></tr>
+      <tr><td>9</td><td>Tue 10/27</td><td>Lecture 18: Gradient Descent</td><td>HW 6 due Thu 10/29 11:59 PM</td></tr>
+      <tr><td>10</td><td>Tue 11/3</td><td>Lecture 19</td><td><a href="#">Midterm 2</a> Thu 11/12 7–9 PM</td></tr>
+    </table></main>`;
+    expect(pageLines(html)).toEqual([
+      "Schedule",
+      "Week | Date | Lecture | Assignments",
+      "9 | Tue 10/27 | Lecture 18: Gradient Descent | HW 6 due Thu 10/29 11:59 PM",
+      "10 | Tue 11/3 | Lecture 19 | Midterm 2 Thu 11/12 7–9 PM",
+    ]);
+  });
+});
+
+describe("Google sync problems", () => {
+  it("explains a disabled Calendar API", () => {
+    const err = new HttpError(403, "www.googleapis.com responded 403", '{"error":{"status":"PERMISSION_DENIED","message":"Google Calendar API has not been used in project 123 before or it is disabled.","details":[{"reason":"SERVICE_DISABLED"}]}}');
+    expect(explainGoogleError("Calendar", err)).toMatch(/Google Calendar API isn't enabled/);
   });
 });

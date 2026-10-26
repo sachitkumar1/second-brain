@@ -416,13 +416,13 @@ function describeRead(title: string, r: Awaited<ReturnType<typeof extractSyllabu
   return `Read ${title}: ${parts.join(", ")}.`;
 }
 
-async function readNow(row: Syllabus): Promise<ActionResult> {
+async function readNow(row: Syllabus, timeoutMs = 50_000): Promise<ActionResult> {
   if (!aiAvailable()) {
     refresh();
     return { ok: true, message: "Saved. It'll be read automatically once an AI key (GEMINI_API_KEY) is set." };
   }
   try {
-    const r = await extractSyllabus(row, 50_000);
+    const r = await extractSyllabus(row, timeoutMs);
     refresh();
     return { ok: true, message: describeRead(row.title, r) };
   } catch (e) {
@@ -477,10 +477,28 @@ export async function uploadSyllabus(_prev: ActionResult | null, form: FormData)
 /** Read a syllabus again now (e.g. after the course updated it, or to turn a removed source back on). */
 export async function rescanSyllabusNow(id: string): Promise<ActionResult> {
   await requireSession();
+  const [before] = await sql<Syllabus[]>`select * from syllabi where id = ${id}`;
+  if (!before) return { ok: false, message: "Not found" };
+  // Course websites: fetch the live page first so the read uses today's schedule.
+  if (before.source === "webpage" && before.connection_id) {
+    const [o] = await syncDue({ budgetMs: 15_000, onlyId: before.connection_id });
+    if (o && !o.ok) return { ok: false, message: o.error ?? "Couldn't load the page" };
+  }
   await rescanSyllabus(id);
   const [row] = await sql<Syllabus[]>`select * from syllabi where id = ${id}`;
-  if (!row) return { ok: false, message: "Not found" };
-  return readNow(row);
+  return readNow(row, 40_000);
+}
+
+/** Read a course website's schedule right away (for sites added before syllabus reading existed). */
+export async function readWebsiteNow(connectionId: string): Promise<ActionResult> {
+  await requireSession();
+  const [o] = await syncDue({ budgetMs: 15_000, onlyId: connectionId });
+  if (o && !o.ok) return { ok: false, message: o.error ?? "Couldn't load the page" };
+  const [row] = await sql<Syllabus[]>`select * from syllabi where source = 'webpage' and ref = ${connectionId}`;
+  if (!row) return { ok: false, message: "That page doesn't have enough text to read." };
+  if (row.status !== "pending") await rescanSyllabus(row.id);
+  const [fresh] = await sql<Syllabus[]>`select * from syllabi where id = ${row.id}`;
+  return readNow(fresh, 40_000);
 }
 
 export async function removeSyllabus(id: string): Promise<ActionResult> {

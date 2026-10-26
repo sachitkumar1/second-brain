@@ -18,6 +18,8 @@ export type SyncResult = {
   /** Updated credentials to persist (e.g. refreshed access token). */
   secret?: unknown;
   account?: string;
+  /** Part of the sync failed (e.g. Calendar API not enabled); shown in Settings → Connections. */
+  warning?: string;
 };
 
 export type SourceAdapter = {

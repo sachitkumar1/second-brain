@@ -332,6 +332,20 @@ async function syncDrive(ctx: SyncContext, token: string): Promise<number> {
   return inputs.length;
 }
 
+/** Turns Google API errors into a next step you can act on. */
+export function explainGoogleError(part: string, err: unknown): string {
+  const body = err instanceof HttpError ? err.body ?? "" : "";
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/accessNotConfigured|has not been used in project|SERVICE_DISABLED/i.test(body + msg)) {
+    const api = part === "Gmail" ? "Gmail API" : part === "Calendar" ? "Google Calendar API" : "Google Drive API";
+    return `the ${api} isn't enabled in your Google Cloud project. Enable it under APIs & Services → Library, wait a minute, then press Sync.`;
+  }
+  if (err instanceof HttpError && err.status === 403 && /insufficient|scope/i.test(body)) {
+    return "this account didn't grant access. Reconnect it and tick every permission on Google's consent screen.";
+  }
+  return msg.slice(0, 200);
+}
+
 // ---------- Adapter ----------
 
 export const google: SourceAdapter = {
@@ -346,25 +360,28 @@ export const google: SourceAdapter = {
     const counts: Record<string, number> = {};
     const result: SyncResult = { secret, counts, newItems: [] };
 
-    const tasks: Promise<void>[] = [];
+    const parts: [string, Promise<void>][] = [];
     if (cfg.gmail)
-      tasks.push(
+      parts.push([
+        "Gmail",
         syncGmail(ctx, token).then((r) => {
           counts.newEmails = r.newCount;
           result.newItems!.push(...r.newItems);
         }),
-      );
-    if (cfg.calendar) tasks.push(syncCalendar(ctx, token).then((n) => void (counts.events = n)));
+      ]);
+    if (cfg.calendar) parts.push(["Calendar", syncCalendar(ctx, token).then((n) => void (counts.events = n))]);
     // Drive changes slowly; refresh it at most every 30 minutes.
     const lastDrive = Number(conn.cursor.lastDriveSync ?? 0);
     if (cfg.drive && Date.now() - lastDrive > 30 * 60_000) {
-      tasks.push(syncDrive(ctx, token).then((n) => void (counts.files = n)));
+      parts.push(["Drive", syncDrive(ctx, token).then((n) => void (counts.files = n))]);
       result.cursor = { ...conn.cursor, lastDriveSync: Date.now() };
     }
-    const settled = await Promise.allSettled(tasks);
-    const failure = settled.find((s) => s.status === "rejected") as PromiseRejectedResult | undefined;
-    if (failure && settled.every((s) => s.status === "rejected")) throw failure.reason;
-    if (failure) counts.partialFailures = settled.filter((s) => s.status === "rejected").length;
+    const settled = await Promise.allSettled(parts.map(([, p]) => p));
+    const failed = settled
+      .map((s, i) => (s.status === "rejected" ? `${parts[i][0]}: ${explainGoogleError(parts[i][0], s.reason)}` : null))
+      .filter((x): x is string => !!x);
+    if (failed.length && failed.length === parts.length) throw new Error(failed.join(" · "));
+    if (failed.length) result.warning = failed.join(" · ");
     return result;
   },
 };

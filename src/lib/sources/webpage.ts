@@ -11,10 +11,21 @@ import type { SourceAdapter, SyncContext, SyncResult } from "./types";
 // on the page into an "update" in Class Updates. The agent then summarizes it and pulls out deadlines.
 
 const MAX_SNAPSHOT = 60_000;
+// Bump when pageLines output changes, so the next check re-baselines instead of reporting a fake "site changed".
+const FORMAT = 2;
 
 export function pageLines(html: string, selector?: string): string[] {
   const $ = cheerio.load(html);
   $("script, style, noscript, svg, iframe, nav, footer, header .navbar").remove();
+  // Schedules are usually tables: keep each row on one line ("Week 9 | Tue 10/27 | Lecture 18 | HW 6 due Thu").
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .children("td, th")
+      .map((__, c) => $(c).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+    $(tr).replaceWith($("<p>").text(cells.join(" | ")));
+  });
   const root = selector ? $(selector) : $("main").length ? $("main") : $("body");
   const lines: string[] = [];
   const BLOCKS = "h1, h2, h3, h4, h5, h6, p, li, td, th, dt, dd, blockquote, pre, div, table, ul, ol, section, article";
@@ -46,12 +57,17 @@ export const webpage: SourceAdapter = {
     });
     const lines = pageLines(await res.text(), ctx.conn.config.selector || undefined);
     const snapshot = lines.join("\n").slice(0, MAX_SNAPSHOT);
+    if (snapshot.replace(/\s+/g, "").length < 200) {
+      throw new Error(
+        "This page has almost no text without JavaScript, so it can't be read. Add the course's schedule or syllabus page directly, or upload the schedule under Classes → Syllabi & schedules.",
+      );
+    }
     const hash = createHash("sha256").update(snapshot).digest("hex");
     const prevHash = ctx.conn.cursor.hash as string | undefined;
     const prevLines = String(ctx.conn.cursor.snapshot ?? "").split("\n");
 
     let newItems: SyncResult["newItems"] = [];
-    if (prevHash && prevHash !== hash) {
+    if (prevHash && prevHash !== hash && ctx.conn.cursor.format === FORMAT) {
       const added = addedLines(prevLines, snapshot.split("\n"));
       const diffText = added.join("\n").trim();
       // Ignore tiny churn like a changed "last updated" timestamp.
@@ -90,7 +106,7 @@ export const webpage: SourceAdapter = {
     return {
       newItems,
       counts: { lines: lines.length, changed: prevHash && prevHash !== hash ? 1 : 0 },
-      cursor: { hash, snapshot, checkedAt: ctx.now.toISOString() },
+      cursor: { hash, snapshot, format: FORMAT, checkedAt: ctx.now.toISOString() },
     };
   },
 };

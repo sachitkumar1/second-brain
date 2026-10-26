@@ -247,3 +247,28 @@ export async function deleteSyllabus(id: string): Promise<void> {
 export async function rescanSyllabus(id: string): Promise<void> {
   await sql`update syllabi set status = 'pending', attempts = 0, error = null, updated_at = now() where id = ${id}`;
 }
+
+/** Upcoming deadlines each syllabus added, keyed by syllabus id. */
+export async function datesBySyllabus(): Promise<Map<string, { title: string; due_at: Date; all_day: boolean }[]>> {
+  const rows = await sql<{ external_id: string; title: string; due_at: Date; all_day: boolean }[]>`
+    select external_id, title, due_at, all_day from tasks
+    where source = 'syllabus' and status = 'open' and due_at > now() - interval '1 day'
+    order by due_at`;
+  const out = new Map<string, { title: string; due_at: Date; all_day: boolean }[]>();
+  for (const r of rows) {
+    const id = r.external_id.split(":")[0];
+    if (!out.has(id)) out.set(id, []);
+    out.get(id)!.push(r);
+  }
+  return out;
+}
+
+/** Course-website connections that haven't been read as a schedule yet. */
+export async function unreadWebsites(): Promise<{ id: string; label: string; url: string; course: string | null; status: string; last_error: string | null }[]> {
+  return sql`
+    select c.id, c.label, c.config->>'url' as url, c.config->>'course' as course, c.status, c.last_error
+    from connections c
+    where c.type = 'webpage' and c.enabled and coalesce(c.config->>'schedule', 'true') <> 'false'
+      and not exists (select 1 from syllabi s where s.source = 'webpage' and s.ref = c.id::text)
+    order by c.label`;
+}
