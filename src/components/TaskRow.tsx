@@ -31,6 +31,7 @@ const SOURCE_LABEL: Record<string, string> = {
   agent: "Agent",
   manual: "You",
   ed: "Ed",
+  syllabus: "Syllabus",
 };
 
 export function TaskRow({ task, showNotes = false }: { task: TaskView; showNotes?: boolean }) {

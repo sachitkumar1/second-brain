@@ -10,6 +10,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   // These packages use Node APIs and should not be bundled into server chunks.
+  experimental: {
+    // Syllabus PDFs are uploaded through a server action; Vercel caps request bodies at 4.5 MB.
+    serverActions: { bodySizeLimit: "4mb" },
+  },
   serverExternalPackages: ["node-ical", "nodemailer", "web-push", "postgres"],
   turbopack: {
     rules: {

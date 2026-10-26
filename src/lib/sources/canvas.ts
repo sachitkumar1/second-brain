@@ -2,6 +2,7 @@ import "server-only";
 import { courseKey } from "../courses";
 import { fetchOk, htmlToText } from "../http";
 import { readSecret, upsertAssignments, upsertItems, type AssignmentInput, type ItemInput } from "../store";
+import { upsertSyllabusSource } from "../syllabus";
 import type { SourceAdapter, SyncContext, SyncResult } from "./types";
 
 // Canvas LMS (bCourses at Berkeley). Auth: a personal access token from
@@ -13,6 +14,7 @@ type Course = {
   id: number;
   name: string;
   course_code?: string;
+  syllabus_body?: string | null;
   access_restricted_by_date?: boolean;
   term?: { name?: string; end_at?: string | null };
 };
@@ -81,7 +83,7 @@ export const canvas: SourceAdapter = {
     const token = secret.token;
     const now = ctx.now;
 
-    const courses = (await getAll<Course>(`${base}/api/v1/courses?enrollment_state=active&per_page=100&include[]=term`, token)).filter(
+    const courses = (await getAll<Course>(`${base}/api/v1/courses?enrollment_state=active&per_page=100&include[]=term&include[]=syllabus_body`, token)).filter(
       (c) => !c.access_restricted_by_date && c.name && (!c.term?.end_at || new Date(c.term.end_at).getTime() > now.getTime() - 14 * 86_400_000),
     );
     const courseName = new Map<number, string>();
@@ -89,6 +91,21 @@ export const canvas: SourceAdapter = {
       courseName.set(c.id, courseKey(c.course_code) ?? courseKey(c.name) ?? c.course_code ?? c.name);
     }
     const hidden = new Set(ctx.settings.hiddenCourses);
+
+    // Each course's bCourses syllabus page is read by the agent for deadlines and exams (only when it changes).
+    for (const c of courses) {
+      const label = courseName.get(c.id) ?? null;
+      if (!c.syllabus_body || (label && hidden.has(label))) continue;
+      await upsertSyllabusSource({
+        source: "canvas",
+        ref: `${ctx.conn.id}:${c.id}`,
+        connectionId: ctx.conn.id,
+        course: label,
+        title: `${label ?? c.name} syllabus (bCourses)`,
+        url: `${base}/courses/${c.id}/assignments/syllabus`,
+        text: htmlToText(c.syllabus_body),
+      });
+    }
 
     // Assignments, quizzes, discussions with due dates — the planner API returns them with submission state.
     const start = new Date(now.getTime() - 21 * 86_400_000).toISOString();

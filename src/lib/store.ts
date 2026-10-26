@@ -251,6 +251,8 @@ export type AssignmentInput = {
   submitted?: boolean;
   score?: string | null;
   notes?: string | null;
+  allDay?: boolean;
+  priority?: number;
 };
 
 /**
@@ -263,15 +265,17 @@ export async function upsertAssignments(connectionId: string | null, list: Assig
     const submitted = a.submitted ?? false;
     const rows = await sql<(Task & { inserted: boolean })[]>`
       insert into tasks (source, kind, connection_id, external_id, title, course, url, due_at, submitted, score, notes,
-                         status, completed_at, priority)
+                         status, completed_at, priority, all_day)
       values (${a.source}, 'assignment', ${connectionId}, ${a.externalId}, ${a.title.slice(0, 300)}, ${a.course ?? null},
               ${safeUrl(a.url)}, ${a.dueAt}, ${submitted}, ${a.score ?? null}, ${a.notes ?? null},
-              ${submitted ? "done" : "open"}, ${submitted ? new Date() : null}, 2)
+              ${submitted ? "done" : "open"}, ${submitted ? new Date() : null}, ${a.priority ?? 2}, ${a.allDay ?? false})
       on conflict (source, external_id) do update set
         title     = excluded.title,
         course    = coalesce(excluded.course, tasks.course),
         url       = coalesce(excluded.url, tasks.url),
         due_at    = excluded.due_at,
+        all_day   = excluded.all_day,
+        notes     = coalesce(excluded.notes, tasks.notes),
         submitted = excluded.submitted,
         score     = coalesce(excluded.score, tasks.score),
         status    = case

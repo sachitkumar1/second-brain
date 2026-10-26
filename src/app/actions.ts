@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { maybeSendDigest, generateDigest } from "@/lib/agent/digest";
 import { runTriage } from "@/lib/agent/triage";
+import { aiAvailable } from "@/lib/agent/ai";
 import { requireSession } from "@/lib/auth";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { sql } from "@/lib/db";
@@ -19,6 +20,10 @@ import { syncDue } from "@/lib/sources";
 import { listSlackChannels } from "@/lib/sources/slack";
 import { createConnection, deleteConnection, getConnection, readSecret, updateConnection, type ConnectionType } from "@/lib/store";
 import { applyTaskAction, type TaskAction } from "@/lib/tasks";
+import { createUpload, deleteSyllabus, extractSyllabus, rescanSyllabus, type Syllabus } from "@/lib/syllabus";
+import { pageLines } from "@/lib/sources/webpage";
+import { fetchOk, htmlToText } from "@/lib/http";
+import { courseKey } from "@/lib/courses";
 import { localDate, zonedToUtc } from "@/lib/time";
 import { SESSION_COOKIE } from "@/lib/session";
 
@@ -398,4 +403,89 @@ export async function forgetReplyQueue(): Promise<ActionResult> {
   await sql`delete from reply_dismissals`;
   refresh();
   return { ok: true, message: "Cleared encrypted reply data from the server" };
+}
+
+// ---------------------------------------------------------------- syllabi
+
+const MAX_UPLOAD = 4 * 1024 * 1024;
+
+function describeRead(title: string, r: Awaited<ReturnType<typeof extractSyllabus>>): string {
+  const parts = [`added ${r.added} date${r.added === 1 ? "" : "s"}`];
+  if (r.alreadyTracked) parts.push(`${r.alreadyTracked} already tracked`);
+  if (r.past) parts.push(`${r.past} already past`);
+  return `Read ${title}: ${parts.join(", ")}.`;
+}
+
+async function readNow(row: Syllabus): Promise<ActionResult> {
+  if (!aiAvailable()) {
+    refresh();
+    return { ok: true, message: "Saved. It'll be read automatically once an AI key (GEMINI_API_KEY) is set." };
+  }
+  try {
+    const r = await extractSyllabus(row, 50_000);
+    refresh();
+    return { ok: true, message: describeRead(row.title, r) };
+  } catch (e) {
+    refresh();
+    const msg = e instanceof Error ? e.message : String(e);
+    return /abort|timeout/i.test(msg)
+      ? { ok: true, message: "Still reading. It'll finish in the background within about 10 minutes." }
+      : { ok: false, message: msg };
+  }
+}
+
+/** Upload a syllabus (PDF or text file), paste its text, or give a link; deadlines are added right away. */
+export async function uploadSyllabus(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  await requireSession();
+  const rawCourse = String(form.get("course") ?? "").trim();
+  const course = rawCourse ? courseKey(rawCourse) ?? rawCourse : null;
+  const file = form.get("file");
+  const pasted = String(form.get("text") ?? "").trim();
+  const link = String(form.get("url") ?? "").trim();
+  try {
+    let row: Syllabus;
+    if (file instanceof File && file.size > 0) {
+      if (file.size > MAX_UPLOAD) return { ok: false, message: "That file is over 4 MB. Try a smaller PDF or paste the schedule text." };
+      const name = file.name || "Syllabus";
+      const title = `${course ? course + " " : ""}${name.replace(/\.[a-z0-9]+$/i, "")}`;
+      const buf = Buffer.from(await file.arrayBuffer());
+      if (file.type === "application/pdf" || /\.pdf$/i.test(name)) row = await createUpload({ course, title, pdf: buf });
+      else if (/^text\//.test(file.type) || /\.(txt|md|markdown|html?|csv)$/i.test(name)) {
+        const text = buf.toString("utf8");
+        row = await createUpload({ course, title, text: /\.html?$/i.test(name) || file.type === "text/html" ? htmlToText(text) : text });
+      } else return { ok: false, message: "Upload a PDF or a text file. For Word or Google Docs, export as PDF first." };
+    } else if (pasted) {
+      row = await createUpload({ course, title: `${course ? course + " " : ""}syllabus (pasted)`, text: pasted });
+    } else if (/^https?:\/\//i.test(link)) {
+      const res = await fetchOk(link, { headers: { "User-Agent": "Mozilla/5.0 (Apollo)" }, timeoutMs: 15_000 });
+      const type = res.headers.get("content-type") ?? "";
+      const title = `${course ? course + " " : ""}${new URL(link).host}${new URL(link).pathname.replace(/\/$/, "")}`;
+      if (type.includes("pdf")) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > MAX_UPLOAD) return { ok: false, message: "That PDF is over 4 MB." };
+        row = await createUpload({ course, title, pdf: buf, url: link });
+      } else row = await createUpload({ course, title, text: pageLines(await res.text()).join("\n"), url: link });
+    } else {
+      return { ok: false, message: "Choose a file, paste the syllabus text, or enter a link." };
+    }
+    return readNow(row);
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Read a syllabus again now (e.g. after the course updated it, or to turn a removed source back on). */
+export async function rescanSyllabusNow(id: string): Promise<ActionResult> {
+  await requireSession();
+  await rescanSyllabus(id);
+  const [row] = await sql<Syllabus[]>`select * from syllabi where id = ${id}`;
+  if (!row) return { ok: false, message: "Not found" };
+  return readNow(row);
+}
+
+export async function removeSyllabus(id: string): Promise<ActionResult> {
+  await requireSession();
+  await deleteSyllabus(id);
+  refresh();
+  return { ok: true, message: "Removed, along with the open deadlines it added" };
 }

@@ -18,7 +18,7 @@ import { ConnectionCard, type ConnectionView } from "@/components/settings/Conne
 import { PushSetup } from "@/components/settings/PushSetup";
 import { WidgetEditor } from "@/components/settings/WidgetEditor";
 import { buttonClass, Field, inputClass, Toggle } from "@/components/ui";
-import { aiAvailable } from "@/lib/agent/claude";
+import { aiAvailable, aiLabel } from "@/lib/agent/ai";
 import { requireSession } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { appUrl, env } from "@/lib/env";
@@ -434,7 +434,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Section id="system" title="System" description="Health of the deployment and what the agent did recently.">
           <ul>
             <Check ok={emailConfigured()} label={`Email sending (${env.gmailSender()})`} hint="Set GMAIL_APP_PASSWORD (a Google app password for the agent mailbox)." />
-            <Check ok={aiAvailable()} label={`AI agent (${env.aiModel()})`} hint="Set ANTHROPIC_API_KEY to enable triage, auto-reminders and the digest summary." />
+            <Check ok={aiAvailable()} label={`AI agent (${aiLabel()})`} hint="Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY to enable triage, auto-reminders, syllabus reading and the digest summary." />
             <Check ok={!!env.googleClientId() && !!env.googleClientSecret()} label="Google sign-in" hint="Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." />
             <Check ok={!!env.cronSecret()} label="Scheduler secret" hint="Set CRON_SECRET and point a scheduler at /api/cron/tick every 10 minutes." />
             <Check ok={pushConfigured()} label="Push notifications" hint="Optional: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY." />

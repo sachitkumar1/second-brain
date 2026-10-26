@@ -14,7 +14,7 @@ Everything after step 4 can be done in any order, and the dashboard works with w
 | 7 | Slack | 5 min per workspace |
 | 8 | Scheduler (every 10 minutes) | 3 min |
 | 9 | Mac agent: iMessage and Instagram reply queue | 10 min |
-| 10 | AI agent | 2 min |
+| 10 | AI agent (free with Gemini) | 2 min |
 
 ---
 
@@ -103,8 +103,12 @@ All under **Settings → Connections**:
   Forgot your password?** with your berkeley.edu email to set a password once. Brings in assignments, due dates, submission status and scores.
 - **Ed Discussion:** [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) → create a token. Brings in announcements,
   pinned threads and staff posts.
-- **Course websites:** add each class site (e.g. the DATA 100 or MATH 110 page). It's checked hourly. New text becomes a Class update,
-  and the agent summarizes it and pulls out any deadlines.
+- **Course websites:** add each class site (e.g. the DATA 100 or MATH 110 page; the page with the schedule is best). It's checked
+  hourly. New text becomes a Class update, and whenever the page changes the agent reads its schedule and adds homework, project
+  and exam dates as deadlines.
+- **Syllabi:** every course's bCourses syllabus page is read automatically. Upload anything else (a PDF syllabus, a pasted schedule,
+  or a link) under **Classes → Syllabi & schedules**. Dates already tracked from bCourses or Gradescope aren't duplicated, and key facts
+  like grading and late policy appear under **From the syllabus** on each course's page.
 - **Calendar feeds:** course Google Calendars, club calendars, or the [UC Berkeley academic calendar](https://registrar.berkeley.edu/calendar/).
 - **Pensieve and CalCentral** can't be connected directly: there's no API, and CalNet requires Duo. Their notification emails are recognized
   in Gmail and shown under Classes, so make sure those notifications go to a connected inbox.
@@ -161,17 +165,31 @@ For live data with an Instagram *professional* (creator) account, see [agent/REA
 
 See [How the reply queue stays private](README.md#privacy-and-security) for what is and isn't uploaded.
 
-## 10. AI agent
-
-Create an API key at [console.anthropic.com](https://console.anthropic.com) → **API keys** and set it as `ANTHROPIC_API_KEY`, then redeploy.
+## 10. AI agent (free with Gemini)
 
 The agent reads new emails, announcements, Ed posts, Slack posts and course-site changes. For each one it writes a one-line summary,
 rates importance, creates reminders for things you need to do (shown under **Reminders → From your agent**), and emails you right
-away about anything urgent. It also writes the "top priorities" section of the morning digest.
+away about anything urgent. It also reads syllabi and course schedules for deadlines (see **Classes → Syllabi & schedules**) and
+writes the "top priorities" section of the morning digest.
 
-It uses `claude-opus-5-5` by default. Expect roughly $10–25/month depending on email volume.
-To spend less, set `AI_MODEL=claude-haiku-5-5`: about 1/40th of the cost, with somewhat less nuanced triage.
-You can also turn off AI for email or Slack in **Settings → General**.
+**Free option: Gemini (recommended).**
+1. Open [aistudio.google.com/apikey](https://aistudio.google.com/apikey) with any Google account → **Create API key**.
+2. Set it as `GEMINI_API_KEY` in Vercel (secret), then redeploy.
+
+It uses `gemini-flash-latest` by default, which is fast, good at this kind of reading, and inside the free tier's daily limits
+for a personal dashboard. To try another model, set `GEMINI_MODEL` (for example `gemini-2.5-flash`, or a Pro model if your key
+allows it; Pro models have much tighter free limits).
+
+> **Privacy on the free tier:** Google may use what's sent through a *free* Gemini key to improve its products, and human
+> reviewers may read it. The agent sends email, announcement and Slack text it triages, plus syllabi. If that's not OK, either
+> turn off **Include email in AI triage** in **Settings → General**, or enable billing on the key in AI Studio (paid usage isn't used
+> for training, and Flash costs a few cents a month at this volume). iMessage and Instagram never go to any AI.
+
+**Paid option: Claude.** Set `ANTHROPIC_API_KEY` instead (from [console.anthropic.com](https://console.anthropic.com)). It uses
+`claude-opus-5-5` by default, roughly $10–25/month; `AI_MODEL=claude-haiku-5-5` is about 1/40th of that. If both keys are set,
+Gemini is used unless you set `AI_PROVIDER=anthropic`.
+
+You can turn off AI for email or Slack in **Settings → General**. **Settings → System** shows which model is in use.
 
 ---
 

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { courseKey } from "../courses";
 import { fetchOk } from "../http";
 import { upsertItems } from "../store";
+import { upsertSyllabusSource } from "../syllabus";
 import type { SourceAdapter, SyncContext, SyncResult } from "./types";
 
 // Watches a course website (e.g. ds100.org, cs61a.org, math54 page) and turns new text
@@ -73,6 +74,18 @@ export const webpage: SourceAdapter = {
           },
         ]);
       }
+    }
+    // Course sites usually carry the schedule; the agent reads the full page for dates whenever it changes.
+    if (ctx.conn.config.schedule !== false) {
+      await upsertSyllabusSource({
+        source: "webpage",
+        ref: ctx.conn.id,
+        connectionId: ctx.conn.id,
+        course: (ctx.conn.config.course as string | undefined) || courseKey(ctx.conn.label) || null,
+        title: ctx.conn.label,
+        url,
+        text: snapshot,
+      });
     }
     return {
       newItems,

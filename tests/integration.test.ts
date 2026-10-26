@@ -21,7 +21,7 @@ vi.mock("@/lib/notify/email", () => ({
 }));
 vi.mock("@/lib/notify/push", () => ({ pushConfigured: () => false, sendPush: vi.fn(async () => 0) }));
 const structuredCall = vi.fn();
-vi.mock("@/lib/agent/claude", () => ({
+vi.mock("@/lib/agent/ai", () => ({
   aiAvailable: () => true,
   structuredCall: (...a: unknown[]) => structuredCall(...a),
   textCall: vi.fn(async () => "A calm Monday.\nTop priorities:\n- Finish HW 6"),
@@ -46,7 +46,7 @@ describe.skipIf(!DB)("scheduler, digest and triage", () => {
   beforeEach(async () => {
     sent.length = 0;
     structuredCall.mockReset();
-    await sql`truncate tasks, items, events, alerts, notification_log, digests, calendars, connections cascade`;
+    await sql`truncate tasks, items, events, alerts, notification_log, digests, calendars, syllabi, connections cascade`;
     await sql`delete from settings`;
     await settings.saveSettings({ notifications: { email: true, push: false, quietHours: { enabled: true, start: "23:00", end: "07:30" }, rules: {} } });
   });
@@ -160,6 +160,77 @@ describe.skipIf(!DB)("scheduler, digest and triage", () => {
     await settings.saveSettings({ hiddenCalendars: [] });
     const all = await digest.buildDigestData(await settings.getSettings(), NOON);
     expect(all.events).toHaveLength(2);
+  });
+
+  it("reads a syllabus into deadlines, skipping past items and ones bCourses/Gradescope already track", async () => {
+    const syl = await import("@/lib/syllabus");
+    await sql`insert into tasks (source, kind, external_id, title, course, due_at) values ('gradescope','assignment','g5','Homework 5','DATA 100', ${new Date("2026-10-30T06:59:00Z")})`;
+    const row = await syl.createUpload({ course: "DATA 100", title: "DATA 100 syllabus", text: "Week 9: HW 5 due Thu 10/29 11:59pm..." });
+    structuredCall.mockResolvedValueOnce({
+      course: "DATA C100",
+      highlights: ["Grading: 30% homework, 20% each midterm, 30% final", "4 slip days for homework"],
+      items: [
+        { title: "HW 5", kind: "assignment", date: "2026-10-29", time: "23:59", notes: null },
+        { title: "HW 6", kind: "assignment", date: "2026-11-05", time: "23:59", notes: null },
+        { title: "Midterm 2", kind: "exam", date: "2026-11-12", time: "19:00", notes: "Pimentel" },
+        { title: "Project 1", kind: "project", date: "2026-11-20", time: null, notes: null },
+        { title: "HW 1", kind: "assignment", date: "2026-09-03", time: "23:59", notes: null },
+      ],
+    });
+    const r = await syl.extractSyllabus(row, 30_000, NOON);
+    expect(r).toMatchObject({ added: 3, alreadyTracked: 1, past: 1 });
+    const added = await sql`select title, priority, all_day, notes, due_at from tasks where source = 'syllabus' order by due_at`;
+    expect(added.map((t: { title: string }) => t.title)).toEqual(["HW 6", "Midterm 2", "Project 1"]);
+    expect(added[1]).toMatchObject({ priority: 3, all_day: false });
+    expect(added[1].notes).toContain("Pimentel");
+    expect(new Date(added[1].due_at).toISOString()).toBe("2026-11-13T03:00:00.000Z"); // 7pm PST
+    expect(added[2]).toMatchObject({ all_day: true });
+    const [saved] = await sql`select status, item_count, highlights, course from syllabi where id = ${row.id}`;
+    expect(saved).toMatchObject({ status: "done", item_count: 3, course: "DATA 100" });
+    expect(saved.highlights).toHaveLength(2);
+
+    // The course moves Midterm 2 and drops Project 1: the next read updates the date and removes the stale one.
+    structuredCall.mockResolvedValueOnce({
+      course: null,
+      highlights: [],
+      items: [
+        { title: "HW 6", kind: "assignment", date: "2026-11-05", time: "23:59", notes: null },
+        { title: "Midterm 2", kind: "exam", date: "2026-11-13", time: "19:00", notes: null },
+      ],
+    });
+    await syl.rescanSyllabus(row.id);
+    const [again] = await sql`select * from syllabi where id = ${row.id}`;
+    await syl.extractSyllabus(again, 30_000, NOON);
+    const now2 = await sql`select title, to_char(due_at at time zone 'America/Los_Angeles', 'MM-DD') as d from tasks where source = 'syllabus' order by due_at`;
+    expect(now2).toEqual([{ title: "HW 6", d: "11-05" }, { title: "Midterm 2", d: "11-13" }]);
+  });
+
+  it("only re-reads synced syllabi when they change, and respects ones you removed", async () => {
+    const syl = await import("@/lib/syllabus");
+    const [conn] = await sql`insert into connections (type, label) values ('webpage', 'DATA 100 site') returning id`;
+    const text = "Schedule\n" + "Week 10: Lecture 19; HW 7 released, due Nov 12. ".repeat(5);
+    const src = { source: "webpage" as const, ref: conn.id, connectionId: conn.id, course: "DATA 100", title: "DATA 100 site", url: "https://ds100.org/fa26/", text };
+    await syl.upsertSyllabusSource(src);
+    await sql`update syllabi set status = 'done'`;
+    await syl.upsertSyllabusSource(src); // unchanged
+    expect((await sql`select status from syllabi`)[0].status).toBe("done");
+    await syl.upsertSyllabusSource({ ...src, text: text + " Midterm 2 moved to Nov 13." });
+    const [row] = await sql`select * from syllabi`;
+    expect(row.status).toBe("pending");
+    await syl.deleteSyllabus(row.id);
+    await syl.upsertSyllabusSource({ ...src, text: text + " HW 8 posted." });
+    expect((await sql`select status from syllabi`)[0].status).toBe("ignored");
+  });
+
+  it("hides a syllabus deadline once bCourses posts the same assignment", async () => {
+    const { withoutSyllabusDuplicates } = await import("@/lib/dedupe");
+    const due = new Date("2026-11-06T07:59:00Z");
+    const tasks = [
+      { source: "syllabus", title: "HW 6", course: "DATA 100", due_at: due },
+      { source: "canvas", title: "Homework 6: Regularization", course: "DATA C100", due_at: due },
+      { source: "syllabus", title: "HW 7", course: "DATA 100", due_at: new Date("2026-11-13T07:59:00Z") },
+    ];
+    expect(withoutSyllabusDuplicates(tasks).map((t) => t.title)).toEqual(["Homework 6: Regularization", "HW 7"]);
   });
 
   it("raises alerts for new class items per your rules", async () => {

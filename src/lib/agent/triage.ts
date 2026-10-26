@@ -3,11 +3,12 @@ import { z } from "zod";
 import { sql } from "../db";
 import { env } from "../env";
 import { courseKey } from "../courses";
+import { isDuplicateAction } from "../dedupe";
 import { truncate } from "../http";
 import { getSettings, type Settings } from "../settings";
 import { addAlert, safeUrl, type Item, type Task } from "../store";
 import { fmtDue, localDate, localTime, zonedToUtc } from "../time";
-import { aiAvailable, structuredCall } from "./claude";
+import { aiAvailable, structuredCall } from "./ai";
 
 const ActionSchema = z.object({
   title: z.string().describe("Short imperative, at most 10 words, e.g. 'Submit Lab 7 on Gradescope'"),
@@ -50,28 +51,7 @@ ${truncate(it.body ?? "", 1800)}
 </item>`;
 }
 
-function tokens(s: string): Set<string> {
-  return new Set(
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9 ]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 1 && !["the", "and", "for", "submit", "complete", "due", "on", "to", "a", "your"].includes(w)),
-  );
-}
-
-/** True when an extracted action is almost certainly the same thing as an existing task. */
-export function isDuplicateAction(title: string, course: string | null, due: Date | null, existing: Pick<Task, "title" | "course" | "due_at">[]): boolean {
-  const a = tokens(title);
-  return existing.some((t) => {
-    if (course && t.course && courseKey(course) !== courseKey(t.course)) return false;
-    if (due && t.due_at && Math.abs(new Date(t.due_at).getTime() - due.getTime()) > 36 * 3_600_000) return false;
-    const b = tokens(t.title);
-    const inter = [...a].filter((w) => b.has(w)).length;
-    const union = new Set([...a, ...b]).size || 1;
-    return inter / union >= 0.5 || (inter >= 2 && (a.size <= 3 || b.size <= 3));
-  });
-}
+export { isDuplicateAction };
 
 function parseLocalDue(due: string | null, tz: string): { at: Date; allDay: boolean } | null {
   if (!due) return null;

@@ -53,7 +53,7 @@ flowchart LR
   subgraph Cloud["Vercel + Postgres"]
     T["/api/cron/tick (every 10 min)"] --> S[Sync: Gmail · Calendar · Drive · bCourses · Gradescope · Ed · Slack · ICS · course sites]
     S --> DB[(Postgres)]
-    DB --> AI[Claude triage → summaries, reminders, urgent alerts]
+    DB --> AI[AI triage + syllabus reading → summaries, reminders, deadlines, urgent alerts]
     AI --> DB
     DB --> N[Reminders · deadline heads-ups · alerts · morning digest]
     N --> E[Email via sachitagent29@gmail.com / push]
@@ -66,8 +66,10 @@ flowchart LR
 - **Next.js 16** (App Router, server components, server actions) on Vercel, **Postgres** (Neon or Supabase), Tailwind CSS.
 - **One scheduler endpoint** (`/api/cron/tick`) syncs whatever is due, runs AI triage, sends the digest once a day after your
   chosen time, and delivers reminders and alerts. Everything is idempotent, so a duplicate or late call is harmless.
-- **AI agent:** Claude (`claude-opus-5-5` by default) with structured outputs. Incoming content is treated as untrusted data,
-  and the agent can only write summaries, reminders and alerts. It can't send anything on your behalf.
+- **AI agent:** Gemini (free tier; `gemini-flash-latest` by default) or Claude, with structured outputs. Incoming content is treated
+  as untrusted data, and the agent can only write summaries, reminders, deadlines and alerts. It can't send anything on your behalf.
+- **Syllabi & schedules:** bCourses syllabus pages, course websites and uploaded syllabi (PDF, text or link) are read for homework,
+  project and exam dates, which become deadlines with reminders, without duplicating ones bCourses or Gradescope already track.
 
 ## Privacy and security
 
@@ -88,8 +90,8 @@ With the Instagram API option, the agent requests only sender and timestamp fiel
 - The scheduler and Mac agent authenticate with secrets; only the agent token's hash is stored.
 - Email action links are signed, single-purpose, expire after 10 days, and need a confirm tap, so link scanners can't trigger them.
 - Links from external sources are restricted to `http(s)`/`mailto`/`sms`.
-- Email, announcement and Slack text you choose to triage is sent to the Anthropic API. API data isn't used for training. You can turn
-  AI off per source in Settings.
+- Email, announcement and Slack text you choose to triage, plus syllabi, is sent to the AI provider. On Gemini's free tier, Google may
+  use it to improve its products; enabling billing on the key (or using Claude) avoids that. You can turn AI off per source in Settings.
 
 ## Project layout
 
@@ -99,7 +101,8 @@ db/migrations/            SQL schema (applied automatically on deploy)
 src/app/(app)/            Dashboard, Classes, Digest, Settings pages
 src/app/api/              cron tick, Google OAuth, Mac agent ingest, reply queue, push, email action links
 src/lib/sources/          Connectors: google, canvas, gradescope, ed, slack, ics, webpage
-src/lib/agent/            Claude triage + morning digest
+src/lib/agent/            AI client (Gemini/Claude), triage, morning digest
+src/lib/syllabus.ts       Syllabus and course-schedule reading
 src/lib/notify/           Email (Gmail SMTP), push, templates, reminder/deadline/alert scheduler
 src/components/           Widgets and UI
 tests/                    Unit, integration (Postgres) and Mac-agent tests

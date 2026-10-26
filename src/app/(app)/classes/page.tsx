@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, CalendarDays, GraduationCap } from "lucide-react";
+import { BookOpen, CalendarDays, GraduationCap, ScrollText } from "lucide-react";
 import { Feed } from "@/components/Feed";
+import { SyllabusPanel } from "@/components/SyllabusPanel";
 import { TaskRow } from "@/components/TaskRow";
 import { cx, Empty, Widget } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { courseColor, courseKey, courseLabel } from "@/lib/courses";
 import { getCourseData, getCourses } from "@/lib/queries";
 import { getSettings } from "@/lib/settings";
+import { listSyllabi } from "@/lib/syllabus";
 import { fmtAgo, fmtDue } from "@/lib/time";
 import { toItemView, toTaskView } from "@/lib/views";
 
@@ -28,6 +30,10 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
   const now = new Date();
   const courses = (await getCourses()).filter((c) => !settings.hiddenCourses.includes(c));
   const { tasks, items } = await getCourseData(selected);
+  const syllabi = await listSyllabi();
+  const highlights = selected
+    ? syllabi.filter((s) => s.status === "done" && (courseKey(s.course) ?? s.course) === selected).flatMap((s) => s.highlights.map((h) => ({ h, from: s.title })))
+    : [];
   const keyOf = (c: string | null) => (c ? courseKey(c) ?? c : null);
 
   const open = tasks.filter((t) => t.status === "open" && t.due_at && new Date(t.due_at).getTime() > now.getTime() - 7 * 86_400_000);
@@ -100,6 +106,19 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
         </div>
       )}
 
+      {highlights.length > 0 && (
+        <Widget title="From the syllabus" icon={<ScrollText />} className="mb-4">
+          <ul className="grid gap-x-8 gap-y-1.5 px-4 py-3 text-sm text-ink-2 md:grid-cols-2">
+            {highlights.map(({ h, from }, i) => (
+              <li key={i} className="flex gap-2" title={from}>
+                <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-gold" aria-hidden />
+                {h}
+              </li>
+            ))}
+          </ul>
+        </Widget>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Widget title={selected ? "Assignments" : "Upcoming assignments"} icon={<CalendarDays />} count={open.length}>
           {open.length ? (
@@ -157,6 +176,22 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
           )}
         </Widget>
       </div>
+      <Widget title="Syllabi & schedules" icon={<ScrollText />} count={syllabi.filter((s) => s.status !== "ignored").length || null} className="mt-4">
+        <SyllabusPanel
+          courses={courses}
+          syllabi={syllabi.map((s) => ({
+            id: s.id,
+            source: s.source,
+            course: courseLabel(s.course, aliases),
+            title: s.title,
+            url: s.url,
+            status: s.status,
+            error: s.error,
+            itemCount: s.item_count,
+            readAgo: s.extracted_at ? `${fmtAgo(s.extracted_at, now)} ago` : null,
+          }))}
+        />
+      </Widget>
       <p className="mt-6 max-w-3xl text-xs leading-relaxed text-muted">
         Pensieve and CalCentral don&apos;t offer a way for outside apps to read your data (CalNet sign-in requires Duo), so their notification emails are picked up from Gmail
         and shown here instead. Add any course website under Settings → Connections to get alerted when it changes.

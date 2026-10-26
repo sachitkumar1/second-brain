@@ -10,7 +10,8 @@ import { buildEmail, type EmailRow } from "../notify/templates";
 import { getSettings, type Settings } from "../settings";
 import type { Item, Task } from "../store";
 import { addDays, daysBetween, fmtDay, fmtDue, fmtTime, hhmmToMinutes, localDate, zonedParts, zonedToUtc } from "../time";
-import { aiAvailable, textCall } from "./claude";
+import { aiAvailable, textCall } from "./ai";
+import { withoutSyllabusDuplicates } from "../dedupe";
 
 export type DigestTask = {
   id: string;
@@ -92,7 +93,7 @@ export async function buildDigestData(settings: Settings, now = new Date()): Pro
   ]);
 
   const hidden = new Set(settings.hiddenCourses);
-  const visible = open.filter((t) => !t.course || !hidden.has(t.course));
+  const visible = withoutSyllabusDuplicates(open.filter((t) => !t.course || !hidden.has(t.course)));
   const overdue = visible.filter(
     (t) =>
       t.due_at &&

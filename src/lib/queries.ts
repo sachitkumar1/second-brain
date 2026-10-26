@@ -2,6 +2,7 @@ import "server-only";
 import type { CalendarOption } from "@/components/CalendarPicker";
 import { sql } from "./db";
 import { courseKey } from "./courses";
+import { withoutSyllabusDuplicates } from "./dedupe";
 import type { Settings } from "./settings";
 import type { Item, Task } from "./store";
 import { addDays, localDate, zonedToUtc } from "./time";
@@ -82,7 +83,7 @@ export async function getDashboardData(settings: Settings, now = new Date()) {
     tomorrowStart,
     events,
     weekEvents,
-    tasks: tasks.filter(visibleTask),
+    tasks: withoutSyllabusDuplicates(tasks.filter(visibleTask)),
     recentDone: recentDone.filter(visibleTask),
     classItems: classItems.filter(visibleItem),
     emails,
@@ -129,5 +130,5 @@ export async function getCourseData(course: string | null) {
       select * from items where is_class and not dismissed and occurred_at > now() - interval '45 days'
       order by occurred_at desc limit 300`,
   ]);
-  return { tasks: tasks.filter((t) => match(t.course)), items: items.filter((i) => match(i.course)) };
+  return { tasks: withoutSyllabusDuplicates(tasks).filter((t) => match(t.course)), items: items.filter((i) => match(i.course)) };
 }

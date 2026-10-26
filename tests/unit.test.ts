@@ -5,6 +5,9 @@ import { parseAssignments, parseCourses, parseGsDate } from "@/lib/sources/grade
 import { addedLines, pageLines } from "@/lib/sources/webpage";
 import { cleanSlackText } from "@/lib/sources/slack";
 import { extractBody } from "@/lib/sources/google";
+import { isSameTask } from "@/lib/dedupe";
+import { jsonSchemaFor } from "@/lib/agent/ai";
+import { z } from "zod";
 
 const TZ = "America/Los_Angeles";
 
@@ -101,5 +104,29 @@ describe("slack + gmail text", () => {
       ],
     });
     expect(body).toBe("Hi plain");
+  });
+});
+
+describe("matching the same assignment across sources", () => {
+  const due = new Date("2026-10-30T06:59:00Z");
+  const t = (title: string, course = "DATA 100") => ({ title, course, due_at: due });
+  it("treats abbreviations and extra words as the same", () => {
+    expect(isSameTask("HW 5", "DATA C100", due, t("Homework 5: Gradient Descent"))).toBe(true);
+    expect(isSameTask("PS 07", "MATH 110", due, t("Problem Set 7", "MATH 110"))).toBe(true);
+    expect(isSameTask("Proj 2 Checkpoint", "DATA 100", due, t("Project 2 Checkpoint"))).toBe(true);
+  });
+  it("keeps different numbers, courses and dates apart", () => {
+    expect(isSameTask("HW 5", "DATA 100", due, t("Homework 6"))).toBe(false);
+    expect(isSameTask("HW 5", "MATH 110", due, t("Homework 5"))).toBe(false);
+    expect(isSameTask("HW 5", "DATA 100", new Date("2026-11-06T06:59:00Z"), t("Homework 5"))).toBe(false);
+  });
+});
+
+describe("Gemini JSON schema", () => {
+  it("drops the safe-integer bounds and $schema that zod adds", () => {
+    const s = JSON.stringify(jsonSchemaFor(z.object({ n: z.number().int(), d: z.string().nullable() })));
+    expect(s).not.toContain("9007199254740991");
+    expect(s).not.toContain("$schema");
+    expect(s).toContain('"required":["n","d"]');
   });
 });

@@ -24,7 +24,7 @@ function localToUtc(dayOffset: number, hhmm: string): Date {
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000);
 
 async function main() {
-  await sql`truncate items, events, tasks, alerts, digests, reply_queue, reply_dismissals, reply_waiting, calendars, connections, run_log, notification_log cascade`;
+  await sql`truncate items, events, tasks, alerts, digests, reply_queue, reply_dismissals, reply_waiting, calendars, syllabi, connections, run_log, notification_log cascade`;
   await sql`delete from settings`;
 
   const [google] = await sql`insert into connections (type, label, account, status, last_sync_at) values ('google', 'sachitkumar2025@gmail.com', 'sachitkumar2025@gmail.com', 'ok', now()) returning id`;
@@ -144,6 +144,15 @@ async function main() {
               values (${platform}, ${ciphertext}, ${iv}, ${salt}, ${sql.json({ name: "PBKDF2", hash: "SHA-256", iterations: 600000 })}, ${data.threads.length}, ${data.threads[0].waitingSince}, now())`;
   }
   await sql`insert into settings (key, value) values ('agent_last_seen', ${sql.json({ at: hoursAgo(0.15).toISOString(), platform: "imessage" })})`;
+
+  // Syllabi
+  await sql`insert into syllabi (source, ref, connection_id, course, title, url, content_text, content_hash, status, item_count, highlights, extracted_at) values
+    ('canvas', ${canvas.id + ":1"}, ${canvas.id}, 'DATA 100', 'DATA 100 syllabus (bCourses)', 'https://bcourses.berkeley.edu', 'x', 'h1', 'done', 9,
+     ${sql.json(["Grading: 25% homework, 15% labs, 20% projects, 15% midterm, 25% final", "5 slip days total for homework and projects", "Midterm 2: Thu Nov 12, 7–9 PM (Pimentel)", "Lowest 2 lab scores dropped"])}, ${hoursAgo(5)}),
+    ('webpage', 'site', null, 'DATA 100', 'DATA 100 site', 'https://ds100.org/fa26/', 'x', 'h2', 'done', 14, '[]'::jsonb, ${hoursAgo(1)}),
+    ('canvas', ${canvas.id + ":2"}, ${canvas.id}, 'STAT 134', 'STAT 134 syllabus (bCourses)', 'https://bcourses.berkeley.edu', 'x', 'h3', 'pending', 0, '[]'::jsonb, null)`;
+  await sql`insert into syllabi (source, course, title, content_text, content_hash, status, item_count, highlights, extracted_at) values
+    ('upload', 'MATH 110', 'MATH 110 Syllabus Fall 2026', 'x', 'h4', 'done', 6, ${sql.json(["Homework due Wednesdays 11:59 PM on Gradescope", "No late homework; lowest score dropped"])}, ${hoursAgo(26)})`;
 
   // Today's digest narrative
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
